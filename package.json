@@ -1,0 +1,40 @@
+{
+  "name": "fleet-management",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fleet Management — self-hosted IDP for AWS (CDK bootstrap)",
+  "license": "Apache-2.0",
+  "bin": {
+    "fleet": "bin/fleet.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --all --require-approval never",
+    "test": "jest --passWithNoTests",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.14.0",
+    "aws-cdk": "2.1126.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.5.4"
+  },
+  "dependencies": {
+    "@aws-cdk/lambda-layer-kubectl-v31": "^2.1.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "aws-cdk-lib": "2.240.0",
+    "constructs": "^10.4.2",
+    "js-yaml": "^4.1.0"
+  }
+}

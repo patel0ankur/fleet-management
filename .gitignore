@@ -1,0 +1,42 @@
+# CDK
+cdk.out/
+cdk.context.json
+.cdk.staging/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+
+# TypeScript
+dist/
+build/
+
+# Go
+cli/fleetctl/fleetctl
+cli/fleetctl/dist/
+*.test
+*.out
+vendor/
+
+# Local config (never commit real platform.yaml)
+config/platform.yaml
+config/platform.*.yaml
+!config/platform.example.yaml
+!config/platform.schema.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Secrets
+*.pem
+*.key
+.env
+.env.*
+!.env.example
