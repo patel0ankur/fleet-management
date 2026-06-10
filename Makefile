@@ -34,5 +34,8 @@ test: ## Run unit tests
 cli-build: ## Build fleetctl binary
 	cd cli/fleetctl && go build -o fleetctl .
 
+render-gitops: ## Render Phase 2 manifests into $GITOPS (default ../fleet-gitops)
+	./hack/render-gitops.sh $(or $(GITOPS),../fleet-gitops) --config $(CONFIG)
+
 clean:
 	rm -rf cdk.out node_modules cli/fleetctl/fleetctl
