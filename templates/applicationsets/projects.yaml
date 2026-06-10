@@ -1,0 +1,82 @@
+# Argo ApplicationSets — turn `projects/<team>/...` directories into running deployments.
+#
+# Two ApplicationSets:
+#   1. fleet-projects   - one Argo App per project, applies project.yaml (Project CR + ProjectGraph kro instance)
+#   2. fleet-workloads  - one Argo App per project, applies everything in deployments/
+#
+# Argo's automated sync retries when the target namespace doesn't exist yet,
+# so the projects-first ordering is best-effort, not enforced.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: fleet-projects
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/patel0ankur/fleet-gitops
+        revision: main
+        files:
+          - path: projects/*/project.yaml
+  template:
+    metadata:
+      name: 'fleet-project-{{path[1]}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "10"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/patel0ankur/fleet-gitops
+        targetRevision: main
+        path: 'projects/{{path[1]}}'
+        directory:
+          include: 'project.yaml'
+      destination:
+        server: "{{ CLUSTER_ARN }}"
+        namespace: argocd     # the Project + ProjectGraph CRs are cluster-scoped or applied to argocd
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: fleet-workloads
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/patel0ankur/fleet-gitops
+        revision: main
+        directories:
+          - path: projects/*/deployments
+  template:
+    metadata:
+      name: 'fleet-workload-{{path[1]}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "20"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/patel0ankur/fleet-gitops
+        targetRevision: main
+        path: '{{path}}'
+        directory:
+          recurse: true
+      destination:
+        server: "{{ CLUSTER_ARN }}"
+        namespace: '{{path[1]}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 10
+          backoff: { duration: 30s, factor: 2, maxDuration: 5m }
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
