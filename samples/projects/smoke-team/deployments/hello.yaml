@@ -1,0 +1,33 @@
+# Phase 2 smoke workload.
+#
+# The `Deployment` CR captures developer intent in the platform's language.
+# The `StatelessServiceWithBucket` (kro instance) is what fans out into the
+# 7 underlying resources. Phase 4 makes the former drive the latter
+# automatically; for Phase 2 we ship both.
+apiVersion: platform.{{ ORG }}/v1alpha1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: smoke-team
+spec:
+  template: stateless-service-with-bucket.kro.run
+  values:
+    name: hello
+    image: public.ecr.aws/nginx/nginx:1.27
+    replicas: 1
+    bucketSuffix: smoke
+    costCenter: "0000-smoke"
+---
+apiVersion: kro.run/v1alpha1
+kind: StatelessServiceWithBucket
+metadata:
+  name: hello
+  namespace: smoke-team
+spec:
+  name: hello
+  namespace: smoke-team
+  image: public.ecr.aws/nginx/nginx:1.27
+  replicas: 1
+  containerPort: 80
+  bucketSuffix: smoke
+  costCenter: "0000-smoke"

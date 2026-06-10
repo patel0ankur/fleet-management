@@ -1,0 +1,25 @@
+# Smoke project — drives the namespace + cost-center label end to end.
+#
+# The `Project` CR is the canonical platform-API representation. The
+# `ProjectGraph` (kro instance) is what actually creates the namespace.
+# Phase 4 introduces a Fleet operator that converts the former into the
+# latter; for Phase 2 we ship both.
+apiVersion: platform.{{ ORG }}/v1alpha1
+kind: Project
+metadata:
+  name: smoke-team
+spec:
+  displayName: "Smoke test team"
+  namespace: smoke-team
+  costCenter: "0000-smoke"
+---
+apiVersion: kro.run/v1alpha1
+kind: ProjectGraph
+metadata:
+  name: smoke-team
+  namespace: argocd
+spec:
+  name: smoke-team
+  displayName: "Smoke test team"
+  namespace: smoke-team
+  costCenter: "0000-smoke"
