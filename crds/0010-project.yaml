@@ -1,0 +1,82 @@
+# Fleet Project — tenancy boundary.
+# Cluster-scoped. Render templates {{ ORG }} at install time.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: projects.platform.{{ ORG }}
+spec:
+  group: platform.{{ ORG }}
+  scope: Cluster
+  names:
+    kind: Project
+    listKind: ProjectList
+    singular: project
+    plural: projects
+    shortNames: [proj]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [displayName, namespace]
+              properties:
+                displayName:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                namespace:
+                  type: string
+                  pattern: "^[a-z][a-z0-9-]{1,62}$"
+                  description: |
+                    Kubernetes namespace this Project owns. Created and labeled
+                    by the project.kro.run ResourceGraphDefinition.
+                costCenter:
+                  type: string
+                  description: Cost-allocation tag propagated to AWS resources.
+                owners:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, type]
+                    properties:
+                      id:
+                        type: string
+                        description: AWS Identity Center group or user ID.
+                      type:
+                        type: string
+                        enum: [SSO_GROUP, SSO_USER]
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                namespaceCreated:
+                  type: boolean
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status]
+                    properties:
+                      type: { type: string }
+                      status: { type: string, enum: ["True", "False", "Unknown"] }
+                      reason: { type: string }
+                      message: { type: string }
+                      lastTransitionTime: { type: string, format: date-time }
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Namespace
+          type: string
+          jsonPath: .spec.namespace
+        - name: CostCenter
+          type: string
+          jsonPath: .spec.costCenter
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

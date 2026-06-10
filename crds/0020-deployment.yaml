@@ -1,0 +1,71 @@
+# Fleet Deployment — instance of an InfraTemplate, scoped to a Project.
+# Namespace-scoped (lives in the Project's namespace).
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: deployments.platform.{{ ORG }}
+spec:
+  group: platform.{{ ORG }}
+  scope: Namespaced
+  names:
+    kind: Deployment
+    listKind: DeploymentList
+    singular: deployment
+    plural: deployments
+    shortNames: [fdep]   # avoid clashing with apps/v1 deployments shortcut
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [template, values]
+              properties:
+                template:
+                  type: string
+                  description: |
+                    Name of the kro ResourceGraphDefinition this Deployment
+                    instantiates (e.g. "stateless-service-with-bucket.kro.run").
+                  pattern: "^[a-z][a-z0-9.-]+$"
+                values:
+                  type: object
+                  description: |
+                    Pass-through values supplied to the RGD instance's spec.
+                    Schema is validated by kro at apply time, not here.
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                templateInstanceRef:
+                  type: object
+                  properties:
+                    apiVersion: { type: string }
+                    kind: { type: string }
+                    name: { type: string }
+                    namespace: { type: string }
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status]
+                    properties:
+                      type: { type: string }
+                      status: { type: string, enum: ["True", "False", "Unknown"] }
+                      reason: { type: string }
+                      message: { type: string }
+                      lastTransitionTime: { type: string, format: date-time }
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Template
+          type: string
+          jsonPath: .spec.template
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
