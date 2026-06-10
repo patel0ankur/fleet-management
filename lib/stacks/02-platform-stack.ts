@@ -89,6 +89,43 @@ export class PlatformStack extends Stack {
         // kro doesn't make AWS API calls; trust policy only.
       });
       new CfnOutput(this, 'KroCapabilityArn', { value: kro.capability.attrArn });
+
+      // The kro capability auto-creates an Access Entry with AmazonEKSKROPolicy,
+      // which only grants permissions on RGDs and instances. To compose other
+      // resources (ACK CRs, native K8s objects) kro needs broader RBAC. For
+      // Phase 1 we attach AmazonEKSClusterAdminPolicy; Phase 7 narrows this
+      // (custom RBAC bound to the eks-access-entry:<role-arn> group).
+      const adminPolicyArn = 'arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy';
+      const kroRbacAssoc = new AwsCustomResource(this, 'KroRbacAssociation', {
+        installLatestAwsSdk: false,
+        onCreate: {
+          service: 'EKS',
+          action: 'AssociateAccessPolicy',
+          parameters: {
+            clusterName: cluster.clusterName,
+            principalArn: kro.role.roleArn,
+            policyArn: adminPolicyArn,
+            accessScope: { type: 'cluster' },
+          },
+          physicalResourceId: PhysicalResourceId.of(`${cluster.clusterName}-kro-rbac`),
+        },
+        onDelete: {
+          service: 'EKS',
+          action: 'DisassociateAccessPolicy',
+          parameters: {
+            clusterName: cluster.clusterName,
+            principalArn: kro.role.roleArn,
+            policyArn: adminPolicyArn,
+          },
+        },
+        policy: AwsCustomResourcePolicy.fromStatements([
+          new iam.PolicyStatement({
+            actions: ['eks:AssociateAccessPolicy', 'eks:DisassociateAccessPolicy', 'eks:DescribeAccessEntry'],
+            resources: ['*'],
+          }),
+        ]),
+      });
+      kroRbacAssoc.node.addDependency(kro.capability);
     }
 
     // --- ArgoCD capability ---
