@@ -1,0 +1,34 @@
+# kro ResourceGraphDefinition that materializes a Project CR into a real
+# Kubernetes Namespace with cost-allocation labels.
+#
+# A future Fleet operator will replace this with admission-time validation +
+# RBAC binding from `spec.owners`. For Phase 2 this is the simplest mechanism
+# that turns the Project CR into actual cluster state.
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: project.kro.run
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: ProjectGraph
+    spec:
+      name: string
+      displayName: string
+      namespace: string
+      costCenter: string | default=""
+    status:
+      namespace: ${ns.metadata.name}
+
+  resources:
+    - id: ns
+      template:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: ${schema.spec.namespace}
+          labels:
+            fleet.platform.{{ ORG }}/project: ${schema.spec.name}
+            fleet.platform.{{ ORG }}/cost-center: ${schema.spec.costCenter}
+          annotations:
+            fleet.platform.{{ ORG }}/display-name: ${schema.spec.displayName}

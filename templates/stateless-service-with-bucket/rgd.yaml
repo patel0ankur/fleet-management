@@ -1,0 +1,152 @@
+# kro ResourceGraphDefinition: stateless service + S3 bucket + Pod Identity wiring.
+# {{ CLUSTER_NAME }} is templated at render time. Phase 4 will move the cluster
+# reference to an Environment CR.
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: stateless-service-with-bucket.kro.run
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: StatelessServiceWithBucket
+    spec:
+      name: string
+      image: string
+      replicas: integer | default=2
+      containerPort: integer | default=8080
+      bucketSuffix: string | default=""
+      costCenter: string | default=""
+      namespace: string
+    status:
+      bucketArn: ${bucket.status.ackResourceMetadata.arn}
+      serviceAccount: ${serviceAccount.metadata.name}
+      podIdentityAssociationName: ${podIdentityAssociation.metadata.name}
+
+  resources:
+    - id: bucket
+      template:
+        apiVersion: s3.services.k8s.aws/v1alpha1
+        kind: Bucket
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.bucketSuffix}-${schema.spec.namespace}
+          namespace: ${schema.spec.namespace}
+        spec:
+          name: ${schema.spec.name}-${schema.spec.bucketSuffix}-${schema.spec.namespace}
+          tagging:
+            tagSet:
+              - key: fleet.platform.{{ ORG }}/project
+                value: ${schema.spec.namespace}
+              - key: fleet.platform.{{ ORG }}/cost-center
+                value: ${schema.spec.costCenter}
+
+    - id: policy
+      template:
+        apiVersion: iam.services.k8s.aws/v1alpha1
+        kind: Policy
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.namespace}-s3
+        spec:
+          name: ${schema.spec.name}-${schema.spec.namespace}-s3
+          policyDocument: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["s3:GetObject","s3:PutObject","s3:DeleteObject"],
+                  "Resource": "${bucket.status.ackResourceMetadata.arn}/*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": ["s3:ListBucket","s3:GetBucketLocation"],
+                  "Resource": "${bucket.status.ackResourceMetadata.arn}"
+                }
+              ]
+            }
+
+    - id: role
+      template:
+        apiVersion: iam.services.k8s.aws/v1alpha1
+        kind: Role
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.namespace}
+        spec:
+          name: ${schema.spec.name}-${schema.spec.namespace}
+          policies:
+            - ${policy.status.ackResourceMetadata.arn}
+          assumeRolePolicyDocument: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Principal": { "Service": "pods.eks.amazonaws.com" },
+                "Action": ["sts:AssumeRole","sts:TagSession"]
+              }]
+            }
+
+    - id: serviceAccount
+      template:
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: ${schema.spec.name}
+          namespace: ${schema.spec.namespace}
+
+    - id: podIdentityAssociation
+      template:
+        apiVersion: eks.services.k8s.aws/v1alpha1
+        kind: PodIdentityAssociation
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.namespace}
+          namespace: ${schema.spec.namespace}
+        spec:
+          clusterName: "{{ CLUSTER_NAME }}"
+          namespace: ${schema.spec.namespace}
+          serviceAccount: ${serviceAccount.metadata.name}
+          roleARN: ${role.status.ackResourceMetadata.arn}
+
+    - id: deployment
+      template:
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: ${schema.spec.name}
+          namespace: ${schema.spec.namespace}
+          labels:
+            app: ${schema.spec.name}
+        spec:
+          replicas: ${schema.spec.replicas}
+          selector:
+            matchLabels:
+              app: ${schema.spec.name}
+          template:
+            metadata:
+              labels:
+                app: ${schema.spec.name}
+            spec:
+              serviceAccountName: ${serviceAccount.metadata.name}
+              containers:
+                - name: app
+                  image: ${schema.spec.image}
+                  ports:
+                    - containerPort: ${schema.spec.containerPort}
+                  env:
+                    - name: BUCKET_NAME
+                      value: ${bucket.spec.name}
+                    - name: AWS_REGION
+                      value: us-east-1
+
+    - id: service
+      template:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: ${schema.spec.name}
+          namespace: ${schema.spec.namespace}
+        spec:
+          type: ClusterIP
+          selector:
+            app: ${schema.spec.name}
+          ports:
+            - port: ${schema.spec.containerPort}
+              targetPort: ${schema.spec.containerPort}
