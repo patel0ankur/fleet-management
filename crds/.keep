@@ -1,0 +1,2 @@
+# Phase 2 — Fleet CRDs (InfraTemplate, Environment, Project, Deployment, Pipeline, IncidentBinding, CostPolicy)
+# Group templated to platform.<org> at install time. See ADR 0004.
