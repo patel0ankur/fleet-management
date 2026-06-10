@@ -14,15 +14,17 @@
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "usage: $0 <gitops-checkout> [--config config/platform.yaml]" >&2
+  echo "usage: $0 <gitops-checkout> [--config config/platform.yaml] [--with-smoke]" >&2
   exit 1
 fi
 
 GITOPS="$1"; shift
 CONFIG="config/platform.yaml"
+WITH_SMOKE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --config) CONFIG="$2"; shift 2 ;;
+    --with-smoke) WITH_SMOKE=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -63,6 +65,7 @@ CLUSTER_ARN="arn:aws:eks:${REGION}:${ACCOUNT}:cluster/${CLUSTER_NAME}"
 
 echo "==> Rendering with:"
 echo "    ORG          = $ORG"
+echo "    REGION       = $REGION"
 echo "    CLUSTER_NAME = $CLUSTER_NAME"
 echo "    CLUSTER_ARN  = $CLUSTER_ARN"
 echo "    target       = $GITOPS"
@@ -73,6 +76,7 @@ substitute() {
   mkdir -p "$(dirname "$dst")"
   sed \
     -e "s|{{ *ORG *}}|$ORG|g" \
+    -e "s|{{ *REGION *}}|$REGION|g" \
     -e "s|{{ *CLUSTER_NAME *}}|$CLUSTER_NAME|g" \
     -e "s|{{ *CLUSTER_ARN *}}|$CLUSTER_ARN|g" \
     "$src" > "$dst"
@@ -93,11 +97,16 @@ substitute templates/stateless-service-with-bucket/rgd.yaml \
 substitute templates/applicationsets/projects.yaml \
   "$GITOPS/clusters/control/80-applicationsets/projects.yaml"
 
-# Smoke fixture
-substitute samples/projects/smoke-team/project.yaml \
-  "$GITOPS/projects/smoke-team/project.yaml"
-substitute samples/projects/smoke-team/deployments/hello.yaml \
-  "$GITOPS/projects/smoke-team/deployments/hello.yaml"
+# Smoke fixture (opt-in; use --with-smoke). Without it, fresh adopters don't
+# accidentally provision an S3 bucket they didn't ask for.
+if [[ "$WITH_SMOKE" == "1" ]]; then
+  substitute samples/projects/smoke-team/project.yaml \
+    "$GITOPS/projects/smoke-team/project.yaml"
+  substitute samples/projects/smoke-team/deployments/hello.yaml \
+    "$GITOPS/projects/smoke-team/deployments/hello.yaml"
+else
+  echo "    (skipping smoke fixture; pass --with-smoke to include it)"
+fi
 
 echo
 echo "==> Done. Review with:  cd $GITOPS && git status -s && git diff"

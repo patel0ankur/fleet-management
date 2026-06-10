@@ -93,6 +93,13 @@ spec:
           namespace: ${schema.spec.namespace}
 
     - id: podIdentityAssociation
+      # Block downstream resources (the Deployment) until ACK has reconciled
+      # this PodIdentityAssociation. Without this, the workload pod can start
+      # before the EKS Pod Identity agent injects the AWS_CONTAINER_*
+      # environment variables, and end up assuming the node IAM role on its
+      # first incarnation.
+      readyWhen:
+        - ${podIdentityAssociation.status.conditions.exists(c, c.type == "ACK.ResourceSynced" && c.status == "True")}
       template:
         apiVersion: eks.services.k8s.aws/v1alpha1
         kind: PodIdentityAssociation
@@ -114,6 +121,10 @@ spec:
           namespace: ${schema.spec.namespace}
           labels:
             app: ${schema.spec.name}
+            # Reference the PodIdentityAssociation by name so kro orders this
+            # Deployment after the PIA's readyWhen evaluates True. Carries no
+            # runtime meaning; pure dependency-edge marker.
+            fleet.platform.{{ ORG }}/pod-identity: ${podIdentityAssociation.metadata.name}
         spec:
           replicas: ${schema.spec.replicas}
           selector:
@@ -134,7 +145,7 @@ spec:
                     - name: BUCKET_NAME
                       value: ${bucket.spec.name}
                     - name: AWS_REGION
-                      value: us-east-1
+                      value: "{{ REGION }}"
 
     - id: service
       template:
