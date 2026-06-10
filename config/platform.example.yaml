@@ -1,0 +1,96 @@
+# Fleet Management — PlatformConfig
+# Copy to platform.yaml and edit before running `fleetctl deploy`.
+# Schema: ./platform.schema.json
+
+apiVersion: fleet.platform/v1
+kind: PlatformConfig
+metadata:
+  # DNS-safe name for this Fleet instance. Used as a prefix on every CDK stack.
+  name: acme-fleet
+  # Org slug. Phase 2+ CRDs will live under group `platform.<org>`.
+  org: acme
+
+spec:
+  aws:
+    # 12-digit shared-services account that hosts the EKS control cluster.
+    sharedServicesAccount: "111111111111"
+    region: us-west-2
+    # Applied to every CDK-managed resource.
+    tags:
+      Owner: platform-team
+      CostCenter: "1234"
+      Environment: shared-services
+
+  network:
+    vpcCidr: 10.40.0.0/16
+    azCount: 3
+    # Single NAT keeps cost down for non-prod control planes.
+    # Bump to 3 (one per AZ) for HA workloads.
+    natGateways: 1
+    # If empty, the EKS API endpoint allows public access from 0.0.0.0/0
+    # during bootstrap. Phase 7 hardening switches to private + bastion.
+    publicAccessCidrs: []
+
+  eks:
+    name: fleet-control
+    version: "1.31"
+    # IAM principals that should get cluster-admin via Access Entries.
+    # Add the role/user that runs `fleetctl deploy` so kubectl works
+    # without a manual `aws eks create-access-entry` follow-up.
+    adminPrincipalArns:
+      - arn:aws:iam::111111111111:role/PlatformEngineer
+    nodeGroups:
+      - name: system
+        instanceTypes: [m6i.large]
+        minSize: 2
+        maxSize: 4
+        labels:
+          fleet.role: system
+        taints:
+          - key: dedicated
+            value: system
+            effect: NO_SCHEDULE
+      - name: platform
+        instanceTypes: [m6i.xlarge]
+        minSize: 3
+        maxSize: 6
+        labels:
+          fleet.role: platform
+
+  # AWS Identity Center is required for the Argo CD capability.
+  # Get the instance ARN with: aws sso-admin list-instances
+  # Get group IDs with: aws identitystore list-groups --identity-store-id <id>
+  identity:
+    idc:
+      instanceArn: arn:aws:sso:::instance/ssoins-XXXXXXXXXXXXXXXX
+      region: us-east-1
+      # IdC user or group that gets Argo CD ADMIN role
+      adminGroupId: 00000000-0000-0000-0000-000000000000
+      adminGroupType: SSO_GROUP   # or SSO_USER
+
+  gitops:
+    # Repo that will hold ArgoCD Application manifests, kro ResourceGroups,
+    # and InfraTemplates. Create it (empty is fine) before deploying.
+    repoUrl: https://github.com/acme/fleet-gitops
+    branch: main
+    # Path inside the repo that the bootstrap Application watches.
+    pathPrefix: clusters/control
+    # One of these is required for private repos. Secrets Manager ARN.
+    sshKeySecretArn: ""
+    tokenSecretArn: ""
+
+  # EKS Capabilities — fully managed by AWS. Toggle each capability on/off.
+  # Each becomes an AWS::EKS::Capability resource with its own IAM Capability Role.
+  # See https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html
+  capabilities:
+    ack:    true
+    kro:    true
+    argocd: true
+
+  # Phase 5 — wired in later, validated as ARN format here.
+  observability:
+    devopsAgentWebhookSecretArn: ""
+
+  # Phase 6 — wired in later.
+  cost:
+    curBucket: ""

@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/your-org/fleet-management/config/platform.schema.json",
+  "title": "Fleet Management PlatformConfig",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "fleet.platform/v1" },
+    "kind": { "const": "PlatformConfig" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "org"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,40}$",
+          "description": "DNS-safe platform instance name"
+        },
+        "org": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,30}$",
+          "description": "Org slug; CRD group becomes platform.<org>"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["aws", "network", "eks", "gitops", "capabilities", "identity"],
+      "additionalProperties": false,
+      "properties": {
+        "aws": {
+          "type": "object",
+          "required": ["sharedServicesAccount", "region"],
+          "additionalProperties": false,
+          "properties": {
+            "sharedServicesAccount": { "type": "string", "pattern": "^[0-9]{12}$" },
+            "region": { "type": "string", "pattern": "^[a-z]{2}-[a-z]+-[0-9]$" },
+            "tags": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vpcCidr": { "type": "string", "default": "10.40.0.0/16" },
+            "azCount": { "type": "integer", "minimum": 2, "maximum": 6, "default": 3 },
+            "natGateways": { "type": "integer", "minimum": 1, "maximum": 6, "default": 1 },
+            "publicAccessCidrs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": []
+            }
+          }
+        },
+        "eks": {
+          "type": "object",
+          "required": ["name", "version", "nodeGroups"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9-]{0,99}$" },
+            "version": { "type": "string", "pattern": "^1\\.(3[0-9]|[4-9][0-9])$" },
+            "adminPrincipalArns": {
+              "type": "array",
+              "uniqueItems": true,
+              "default": [],
+              "items": {
+                "type": "string",
+                "pattern": "^arn:aws:(iam|sts)::[0-9]{12}:(role|user|assumed-role)/.+$"
+              }
+            },
+            "nodeGroups": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["name", "instanceTypes", "minSize", "maxSize"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,30}$" },
+                  "instanceTypes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string" }
+                  },
+                  "minSize": { "type": "integer", "minimum": 0 },
+                  "maxSize": { "type": "integer", "minimum": 1 },
+                  "desiredSize": { "type": "integer", "minimum": 0 },
+                  "labels": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  },
+                  "taints": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["key", "value", "effect"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string" },
+                        "effect": { "enum": ["NO_SCHEDULE", "PREFER_NO_SCHEDULE", "NO_EXECUTE"] }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "identity": {
+          "type": "object",
+          "required": ["idc"],
+          "additionalProperties": false,
+          "properties": {
+            "idc": {
+              "type": "object",
+              "required": ["instanceArn", "region", "adminGroupId"],
+              "additionalProperties": false,
+              "properties": {
+                "instanceArn": { "type": "string", "pattern": "^arn:aws:sso:::instance/ssoins-[a-f0-9]+$" },
+                "region": { "type": "string", "pattern": "^[a-z]{2}-[a-z]+-[0-9]$" },
+                "adminGroupId": { "type": "string", "minLength": 1 },
+                "adminGroupType": { "enum": ["SSO_GROUP", "SSO_USER"], "default": "SSO_GROUP" }
+              }
+            }
+          }
+        },
+        "gitops": {
+          "type": "object",
+          "required": ["repoUrl", "branch", "pathPrefix"],
+          "additionalProperties": false,
+          "properties": {
+            "repoUrl": { "type": "string", "format": "uri" },
+            "branch": { "type": "string", "default": "main" },
+            "pathPrefix": { "type": "string", "default": "clusters/control" },
+            "sshKeySecretArn": { "type": "string" },
+            "tokenSecretArn": { "type": "string" }
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ack":    { "type": "boolean", "default": true },
+            "kro":    { "type": "boolean", "default": true },
+            "argocd": { "type": "boolean", "default": true }
+          }
+        },
+        "observability": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "devopsAgentWebhookSecretArn": { "type": "string" }
+          }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "curBucket": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
