@@ -92,6 +92,8 @@ kubectl -n argocd get application fleet-bootstrap \
 
 If the status shows `Unknown` with `cluster ... is disabled`, the in-cluster destination Secret is missing — see ADR 0006 and the troubleshooting section.
 
+**Note:** the `fleet-bootstrap` App stays at `Synced/Progressing` indefinitely because its children (CRDs, AppProjects, ApplicationSets, kro RGDs) have no built-in Argo health checks. The managed Argo CD capability does not yet honor user-supplied Lua scripts in `argocd-cm`. This is cosmetic; child workload Apps containing native Deployments/Services report `Healthy` correctly. Track AWS capability docs for resolution.
+
 ## 6. Secrets Store CSI Driver + ASCP working
 
 ```bash
@@ -197,3 +199,4 @@ aws secretsmanager delete-secret --region us-east-1 --secret-id /fleet/smoke --f
   - `An IAM role must be associated with service account ...` -> the SecretProviderClass is missing `usePodIdentity: "true"` (ASCP defaults to IRSA).
   - `The token included in the request has no service account role association for it` -> Pod Identity association missing or wrong namespace/SA. Verify with `aws eks list-pod-identity-associations --service-account <name> --namespace <ns>`.
   - `AccessDeniedException: ... GetSecretValue` -> the IAM role exists but lacks `secretsmanager:GetSecretValue` on the secret's ARN.
+- **First pod after a fresh `Deployment` CR comes up without `AWS_CONTAINER_*` env vars** - the kro RGD `readyWhen` gate guarantees ACK has reconciled the PodIdentityAssociation in AWS before the K8s Deployment is created, but the EKS pod-identity-webhook polls AWS on its own cadence (~tens of seconds) and may admit the very first pod before its cache sees the new association. Subsequent pods (including any restart) inject correctly. Workloads should rely on the AWS SDK's default credential refresh and liveness/readiness probes; if your app cannot tolerate one cold-start retry, add a small `initContainer` that polls `$AWS_CONTAINER_CREDENTIALS_FULL_URI` until it answers.
