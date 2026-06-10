@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ts:
+    name: TypeScript / CDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - name: cdk synth (using example config)
+        run: cp config/platform.example.yaml config/platform.yaml && npx cdk synth --context configFile=config/platform.yaml
+      - run: npx jest --passWithNoTests
+
+  go:
+    name: Go / fleetctl
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli/fleetctl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/fleetctl/go.mod
+          cache-dependency-path: cli/fleetctl/go.sum
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./...
+
+  shell:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: shellcheck hack/check-tools.sh
