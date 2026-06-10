@@ -253,6 +253,72 @@ export class PlatformStack extends Stack {
       });
       bootstrapApp.node.addDependency(inClusterSecret);
 
+      // Argo CD UI health checks for kro CRs.
+      //
+      // KNOWN LIMITATION: The managed Argo CD capability does not currently
+      // merge user-supplied customizations from `argocd-cm`. The ConfigMap
+      // here is forward-compatible (it lands in the cluster, and the AWS
+      // implementation may begin honoring it without our involvement) but
+      // today these Lua scripts are not picked up. The fleet-bootstrap App
+      // therefore stays cosmetically Synced/Progressing forever; child Apps
+      // that contain native Deployments/Services still report Healthy.
+      //
+      // Tracking item; revisit when AWS publishes capability documentation
+      // for argocd-cm customizations.
+      const argoHealthCm = new KubernetesManifest(this, 'ArgoHealthChecksCm', {
+        cluster,
+        overwrite: true,
+        manifest: [{
+          apiVersion: 'v1',
+          kind: 'ConfigMap',
+          metadata: {
+            name: 'argocd-cm',
+            namespace: 'argocd',
+            labels: {
+              'app.kubernetes.io/name': 'argocd-cm',
+              'app.kubernetes.io/part-of': 'argocd',
+            },
+          },
+          data: {
+            'resource.customizations.health.kro.run_ResourceGraphDefinition': [
+              'hs = {}',
+              'if obj.status ~= nil and obj.status.state == "Active" then',
+              '  hs.status = "Healthy"',
+              '  hs.message = "kro RGD active"',
+              '  return hs',
+              'end',
+              'hs.status = "Progressing"',
+              'hs.message = "kro RGD reconciling"',
+              'return hs',
+            ].join('\n'),
+            // Catch-all for kro instance kinds. kro instances expose a state
+            // field at the top of status: ACTIVE, IN_PROGRESS, ERROR.
+            'resource.customizations.health.kro.run_': [
+              'hs = {}',
+              'if obj.status ~= nil and obj.status.state == "ACTIVE" then',
+              '  hs.status = "Healthy"',
+              '  hs.message = "kro instance active"',
+              '  return hs',
+              'end',
+              'if obj.status ~= nil and obj.status.state == "ERROR" then',
+              '  hs.status = "Degraded"',
+              '  hs.message = "kro instance error"',
+              '  return hs',
+              'end',
+              'hs.status = "Progressing"',
+              'hs.message = "kro instance reconciling"',
+              'return hs',
+            ].join('\n'),
+            // ACK CRs: Healthy when the ACK.ResourceSynced condition is True.
+            'resource.customizations.health.s3.services.k8s.aws_Bucket': ackResourceSyncedHealthLua(),
+            'resource.customizations.health.iam.services.k8s.aws_Role': ackResourceSyncedHealthLua(),
+            'resource.customizations.health.iam.services.k8s.aws_Policy': ackResourceSyncedHealthLua(),
+            'resource.customizations.health.eks.services.k8s.aws_PodIdentityAssociation': ackResourceSyncedHealthLua(),
+          },
+        }],
+      });
+      argoHealthCm.node.addDependency(argoRbacAssoc);
+
       // Patch the auto-created `default` AppProject so its destinations include
       // the cluster ARN (the capability seeds it with kubernetes.default.svc,
       // which the capability itself rejects).
@@ -285,4 +351,26 @@ export class PlatformStack extends Stack {
       value: Object.entries(enabled).filter(([, v]) => v).map(([k]) => k).join(','),
     });
   }
+}
+
+/**
+ * Argo CD Lua health script for any ACK resource: Healthy when the
+ * ACK.ResourceSynced condition is True; Degraded on Terminal; otherwise
+ * Progressing.
+ */
+function ackResourceSyncedHealthLua(): string {
+  return [
+    'hs = {}',
+    'if obj.status ~= nil and obj.status.conditions ~= nil then',
+    '  for _, c in ipairs(obj.status.conditions) do',
+    '    if c.type == "ACK.ResourceSynced" and c.status == "True" then',
+    '      hs.status = "Healthy"; hs.message = "ACK resource synced"; return hs',
+    '    end',
+    '    if c.type == "ACK.Terminal" and c.status == "True" then',
+    '      hs.status = "Degraded"; hs.message = c.message or "ACK terminal"; return hs',
+    '    end',
+    '  end',
+    'end',
+    'hs.status = "Progressing"; hs.message = "ACK reconciling"; return hs',
+  ].join('\n');
 }
