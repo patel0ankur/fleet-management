@@ -101,3 +101,7 @@ postgresql:
   primary:
     persistence:
       size: 8Gi
+      # The cluster has no default StorageClass marked; gp2 is the only
+      # provisioner present out of EKS bootstrap. Phase 7 (RDS migration)
+      # makes this moot.
+      storageClass: gp2
