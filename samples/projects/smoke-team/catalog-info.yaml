@@ -1,0 +1,32 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: smoke-team
+  description: Smoke test team (Phase 2 fixture)
+  annotations:
+    fleet.platform.{{ ORG }}/cost-center: "0000-smoke"
+    fleet.platform.{{ ORG }}/namespace: smoke-team
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: smoke-team
+  description: Smoke test workloads
+spec:
+  owner: group:smoke-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: hello
+  description: Phase 2 smoke deployment - StatelessServiceWithBucket
+  annotations:
+    backstage.io/source-location: url:https://github.com/{{ ORG_GH }}/fleet-gitops/blob/main/projects/smoke-team/deployments/hello.yaml
+spec:
+  type: service
+  lifecycle: production
+  owner: group:smoke-team
+  system: smoke-team

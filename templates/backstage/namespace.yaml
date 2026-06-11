@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backstage
+  labels:
+    fleet.platform.{{ ORG }}/component: backstage
+    pod-security.kubernetes.io/enforce: restricted

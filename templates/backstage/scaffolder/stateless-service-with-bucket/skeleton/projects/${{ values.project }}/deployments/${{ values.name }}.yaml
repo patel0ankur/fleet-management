@@ -1,0 +1,13 @@
+apiVersion: kro.run/v1alpha1
+kind: StatelessServiceWithBucket
+metadata:
+  name: ${{ values.name }}
+  namespace: ${{ values.project }}
+spec:
+  name: ${{ values.name }}
+  image: ${{ values.image }}
+  replicas: ${{ values.replicas }}
+  containerPort: ${{ values.containerPort }}
+  bucketSuffix: ${{ values.bucketSuffix }}
+  costCenter: "${{ values.costCenter }}"
+  namespace: ${{ values.project }}

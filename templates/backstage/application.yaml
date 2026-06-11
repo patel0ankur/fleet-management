@@ -1,0 +1,37 @@
+# Argo CD Application for Backstage. Multi-source: chart from the upstream
+# Helm repo + values file checked into fleet-gitops (so config changes are
+# auditable PRs, not Helm CLI invocations).
+#
+# Stock chart only (Phase 3.5 swaps for a Fleet-baked image).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backstage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  project: default
+  sources:
+    - repoURL: https://backstage.github.io/charts
+      chart: backstage
+      targetRevision: 2.6.0
+      helm:
+        valueFiles:
+          - $values/clusters/control/40-backstage/values.yaml
+    - repoURL: https://github.com/{{ ORG_GH }}/fleet-gitops
+      targetRevision: main
+      ref: values
+  destination:
+    server: "{{ CLUSTER_ARN }}"
+    namespace: backstage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

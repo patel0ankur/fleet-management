@@ -1,0 +1,98 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: stateless-service-with-bucket
+  title: Stateless service with S3 bucket
+  description: |
+    Provisions a Kubernetes Deployment + Service + S3 bucket + IAM Role + Pod
+    Identity association, all wired together. Opens a PR against fleet-gitops;
+    once merged, Argo + kro reconcile within ~3 minutes.
+  tags: [fleet, golden-path, aws, s3]
+spec:
+  owner: group:platform
+  type: service
+
+  parameters:
+    - title: Project
+      required: [project, name]
+      properties:
+        project:
+          title: Target project
+          type: string
+          description: Existing Project (= namespace in the cluster)
+          ui:field: EntityPicker
+          ui:options:
+            allowedKinds: [Group]
+            defaultKind: Group
+        name:
+          title: Service name
+          type: string
+          pattern: '^[a-z][a-z0-9-]{1,40}$'
+          description: DNS-safe; used for Deployment, Service, SA, IAM role, bucket prefix
+
+    - title: Container
+      required: [image]
+      properties:
+        image:
+          title: Container image
+          type: string
+          default: public.ecr.aws/nginx/nginx:1.27
+        replicas:
+          title: Replica count
+          type: integer
+          default: 2
+          minimum: 1
+          maximum: 20
+        containerPort:
+          title: Container port
+          type: integer
+          default: 8080
+
+    - title: Storage
+      properties:
+        bucketSuffix:
+          title: Bucket name suffix
+          type: string
+          default: app
+          description: Appended to the bucket name to keep it globally unique.
+        costCenter:
+          title: Cost center tag
+          type: string
+          description: Optional. Falls back to the Project's costCenter annotation.
+
+  steps:
+    - id: render
+      name: Render manifest
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          project: ${{ parameters.project | parseEntityRef | pick('name') }}
+          name: ${{ parameters.name }}
+          image: ${{ parameters.image }}
+          replicas: ${{ parameters.replicas }}
+          containerPort: ${{ parameters.containerPort }}
+          bucketSuffix: ${{ parameters.bucketSuffix }}
+          costCenter: ${{ parameters.costCenter }}
+
+    - id: pr
+      name: Open pull request
+      action: publish:github:pull-request
+      input:
+        repoUrl: github.com?repo=fleet-gitops&owner={{ ORG_GH }}
+        branchName: scaffolder/${{ parameters.project | parseEntityRef | pick('name') }}-${{ parameters.name }}
+        title: 'feat(${{ parameters.project | parseEntityRef | pick(''name'') }}): add Deployment ${{ parameters.name }}'
+        description: |
+          Scaffolded by Backstage.
+
+          Project: ${{ parameters.project }}
+          Image: ${{ parameters.image }}
+
+          Once merged, the fleet-workloads ApplicationSet picks the new file
+          up and Argo reconciles it within ~3 minutes. kro fans out into
+          Deployment + Service + S3 Bucket + IAM Role + Pod Identity.
+
+  output:
+    links:
+      - title: Pull request
+        url: ${{ steps.pr.output.remoteUrl }}
