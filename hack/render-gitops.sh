@@ -55,6 +55,14 @@ CLUSTER_NAME="$(read_yaml spec.eks.name)"
 REGION="$(read_yaml spec.aws.region)"
 ACCOUNT="$(read_yaml spec.aws.sharedServicesAccount)"
 
+# Phase 3 - developer portal (Backstage). All optional; absence skips the
+# 40-backstage render block.
+DP_ENABLED="$(read_yaml spec.developerPortal.enabled)"
+HOST="$(read_yaml spec.developerPortal.host)"
+ORG_GH="$(read_yaml spec.developerPortal.githubOrg)"
+GITHUB_TOKEN_SECRET_ARN="$(read_yaml spec.developerPortal.githubTokenSecretArn)"
+OIDC_CLIENT_SECRET_ARN="$(read_yaml spec.developerPortal.oidcClientSecretArn)"
+
 if [[ -z "$ORG" || -z "$CLUSTER_NAME" || -z "$REGION" || -z "$ACCOUNT" ]]; then
   echo "could not extract org/cluster/region/account from $CONFIG" >&2
   echo "  ORG=$ORG CLUSTER_NAME=$CLUSTER_NAME REGION=$REGION ACCOUNT=$ACCOUNT" >&2
@@ -69,6 +77,10 @@ echo "    REGION       = $REGION"
 echo "    CLUSTER_NAME = $CLUSTER_NAME"
 echo "    CLUSTER_ARN  = $CLUSTER_ARN"
 echo "    target       = $GITOPS"
+if [[ "$DP_ENABLED" == "true" ]]; then
+  echo "    HOST         = $HOST"
+  echo "    ORG_GH       = $ORG_GH"
+fi
 
 # Run sed once per file; portable BSD/GNU.
 substitute() {
@@ -79,6 +91,10 @@ substitute() {
     -e "s|{{ *REGION *}}|$REGION|g" \
     -e "s|{{ *CLUSTER_NAME *}}|$CLUSTER_NAME|g" \
     -e "s|{{ *CLUSTER_ARN *}}|$CLUSTER_ARN|g" \
+    -e "s|{{ *HOST *}}|$HOST|g" \
+    -e "s|{{ *ORG_GH *}}|$ORG_GH|g" \
+    -e "s|{{ *GITHUB_TOKEN_SECRET_ARN *}}|$GITHUB_TOKEN_SECRET_ARN|g" \
+    -e "s|{{ *OIDC_CLIENT_SECRET_ARN *}}|$OIDC_CLIENT_SECRET_ARN|g" \
     "$src" > "$dst"
   echo "    rendered $src -> $dst"
 }
@@ -97,6 +113,39 @@ substitute templates/stateless-service-with-bucket/rgd.yaml \
 substitute templates/applicationsets/projects.yaml \
   "$GITOPS/clusters/control/80-applicationsets/projects.yaml"
 
+# Phase 3 - Backstage (opt-in via spec.developerPortal.enabled).
+if [[ "$DP_ENABLED" == "true" ]]; then
+  if [[ -z "$HOST" || -z "$ORG_GH" || -z "$GITHUB_TOKEN_SECRET_ARN" || -z "$OIDC_CLIENT_SECRET_ARN" ]]; then
+    echo "developerPortal.enabled=true but required fields are missing:" >&2
+    echo "  HOST=$HOST ORG_GH=$ORG_GH" >&2
+    echo "  GITHUB_TOKEN_SECRET_ARN=$GITHUB_TOKEN_SECRET_ARN" >&2
+    echo "  OIDC_CLIENT_SECRET_ARN=$OIDC_CLIENT_SECRET_ARN" >&2
+    exit 1
+  fi
+  substitute templates/backstage/namespace.yaml \
+    "$GITOPS/clusters/control/40-backstage/00-namespace.yaml"
+  substitute templates/backstage/secretproviderclass.yaml \
+    "$GITOPS/clusters/control/40-backstage/10-spc.yaml"
+  substitute templates/backstage/serviceaccount.yaml \
+    "$GITOPS/clusters/control/40-backstage/20-serviceaccount.yaml"
+  substitute templates/backstage/application.yaml \
+    "$GITOPS/clusters/control/40-backstage/30-application.yaml"
+  substitute templates/backstage/values.yaml \
+    "$GITOPS/clusters/control/40-backstage/values.yaml"
+  # Scaffolder template (registered via catalog.locations in values.yaml).
+  substitute templates/backstage/scaffolder/stateless-service-with-bucket/template.yaml \
+    "$GITOPS/clusters/control/40-backstage/scaffolder/stateless-service-with-bucket/template.yaml"
+  # Skeleton has literal Backstage `${{ values.* }}` placeholders that must
+  # survive the render. The substitute() function only touches `{{ FOO }}`
+  # tokens, so we copy this tree verbatim.
+  mkdir -p "$GITOPS/clusters/control/40-backstage/scaffolder/stateless-service-with-bucket/skeleton"
+  cp -R templates/backstage/scaffolder/stateless-service-with-bucket/skeleton/. \
+    "$GITOPS/clusters/control/40-backstage/scaffolder/stateless-service-with-bucket/skeleton/"
+  echo "    copied scaffolder skeleton (verbatim)"
+else
+  echo "    (developerPortal.enabled=false; skipping 40-backstage)"
+fi
+
 # Smoke fixture (opt-in; use --with-smoke). Without it, fresh adopters don't
 # accidentally provision an S3 bucket they didn't ask for.
 if [[ "$WITH_SMOKE" == "1" ]]; then
@@ -104,10 +153,14 @@ if [[ "$WITH_SMOKE" == "1" ]]; then
     "$GITOPS/projects/smoke-team/project.yaml"
   substitute samples/projects/smoke-team/deployments/hello.yaml \
     "$GITOPS/projects/smoke-team/deployments/hello.yaml"
+  if [[ "$DP_ENABLED" == "true" ]]; then
+    substitute samples/projects/smoke-team/catalog-info.yaml \
+      "$GITOPS/projects/smoke-team/catalog-info.yaml"
+  fi
 else
   echo "    (skipping smoke fixture; pass --with-smoke to include it)"
 fi
 
 echo
 echo "==> Done. Review with:  cd $GITOPS && git status -s && git diff"
-echo "    Then:               cd $GITOPS && git add -A && git commit -m 'Phase 2' && git push"
+echo "    Then:               cd $GITOPS && git add -A && git commit -m 'Phase 3' && git push"
