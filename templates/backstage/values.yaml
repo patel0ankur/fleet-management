@@ -85,6 +85,16 @@ backstage:
         name: Fleet Backstage
         email: backstage@{{ HOST }}
       defaultCommitMessage: 'feat: scaffolded by Backstage'
+    # The stock Backstage app bundle validates that a techdocs block exists
+    # even when we aren't building docs yet. 'local' generator + local
+    # publisher satisfies the schema without external infra (S3/GCS). Full
+    # TechDocs (out-of-process builder) is deferred to Phase 3.5.
+    techdocs:
+      builder: 'local'
+      generator:
+        runIn: 'local'
+      publisher:
+        type: 'local'
 ingress:
   enabled: true
   className: alb
