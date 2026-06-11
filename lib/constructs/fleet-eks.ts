@@ -32,9 +32,18 @@ export class FleetEks extends Construct {
   constructor(scope: Construct, id: string, props: FleetEksProps) {
     super(scope, id);
 
+    // PUBLIC (not PUBLIC_AND_PRIVATE) on purpose. With private endpoint
+    // access enabled, the aws-eks-v2 module attaches the kubectl-provider
+    // Lambdas to the VPC so they can reach a private API endpoint. VPC-
+    // attached Lambdas create Hyperplane ENIs that AWS only reclaims on a
+    // slow async sweep, which drags out every `cdk destroy` (CloudFormation
+    // blocks on subnet deletion until the ENIs clear). A public endpoint
+    // (still IAM + RBAC protected) keeps the kubectl provider out of the VPC,
+    // so deploy and destroy are both fast. Phase 7 hardening switches to a
+    // private endpoint + accepts the slower teardown.
     const endpointAccess = props.publicAccessCidrs.length > 0
-      ? eks.EndpointAccess.PUBLIC_AND_PRIVATE.onlyFrom(...props.publicAccessCidrs)
-      : eks.EndpointAccess.PUBLIC_AND_PRIVATE;
+      ? eks.EndpointAccess.PUBLIC.onlyFrom(...props.publicAccessCidrs)
+      : eks.EndpointAccess.PUBLIC;
 
     const kubectlLayer = new KubectlV35Layer(this, 'KubectlLayer');
 
