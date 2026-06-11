@@ -244,7 +244,17 @@ export class PlatformStack extends Stack {
               repoURL: gitops.repoUrl,
               targetRevision: gitops.branch,
               path: gitops.pathPrefix,
-              directory: { recurse: true },
+              directory: {
+                recurse: true,
+                // Exclude Backstage scaffolder content. The Templates and
+                // skeleton files under 40-backstage/scaffolder/ are Backstage
+                // catalog entities, NOT Kubernetes resources - they are
+                // discovered at runtime via Backstage's catalog.locations
+                // (see clusters/control/40-backstage/values.yaml). Argo
+                // would otherwise try to kubectl-apply them and fail with
+                // 'CRD not installed'.
+                exclude: '{**/scaffolder/**,**/values.yaml}',
+              },
             },
             destination: {
               server: clusterArn,

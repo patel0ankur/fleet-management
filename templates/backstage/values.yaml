@@ -1,17 +1,22 @@
-# Backstage Helm values - stock upstream chart.
+# Backstage Helm values - stock upstream chart (backstage/backstage 2.6.0).
 #
 # Deferred to Phase 3.5 (custom image): kubernetes-ingestor, TechDocs builder,
 # OpenChoreo-style catalog provider plugin reading Project/Deployment CRs.
 # Anything that needs `app-config.yaml` plugin wiring lives there instead of
 # here.
+
+# Top-level: ServiceAccount creation is disabled; we created `backstage` SA
+# in 20-serviceaccount.yaml so it pairs with the CDK Pod Identity association
+# by name.
+serviceAccount:
+  create: false
+  name: backstage
+
 backstage:
   image:
     registry: ghcr.io
     repository: backstage/backstage
     tag: "1.30.4"
-  serviceAccount:
-    create: false
-    name: backstage
   extraVolumes:
     - name: backstage-secrets
       csi:
