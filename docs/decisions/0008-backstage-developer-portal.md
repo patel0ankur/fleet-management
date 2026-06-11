@@ -37,6 +37,28 @@ Six concrete choices:
 - **PR auth boundary:** the GitHub PAT scopes determine what the scaffolder can do. We require `repo` + `pull_request`; if the org enforces SAML SSO, the PAT must be SSO-authorized.
 - **DNS is operator-managed.** Phase 3.5 adds an ACK `Route53.RecordSet` for the Backstage `host`.
 
+## Bring-up reality (what "stock chart" actually required)
+
+The "stock chart, config-only" decision held, but first bring-up showed "config-only"
+is more than the plan implied. Captured here so the values/CDK choices are legible
+and the next phase budgets correctly (full detail + symptoms in
+`docs/runbooks/phase-3-verification.md`):
+
+- **The stock app bundle validates config for plugins it ships even when unused.**
+  The backend refused to start without `techdocs` and `kubernetes` blocks present.
+  We provide minimal stubs (`techdocs: local`, empty `kubernetes` locator). Real
+  TechDocs and cluster-view wiring are still Phase 3.5.
+- **The bundled Bitnami postgres is fragile in two ways:** (1) its default image tag
+  was deleted from docker.io (pinned to `bitnamilegacy`), and (2) the chart
+  regenerates the DB password on every Helm render, which fights Argo's repeated
+  syncs against an already-initialized PVC (pinned an explicit password). Both
+  reinforce the Phase 7 plan to move to RDS — the in-cluster DB is the least robust
+  part of the stack.
+- **Ingress needs the AWS Load Balancer Controller, which is not a managed add-on.**
+  We install it in the bootstrap stack (Helm + IAM role + Pod Identity), mirroring
+  the EBS CSI controller. The ALB serves HTTPS-only and auto-discovers the ACM cert
+  by hostname; the operator pre-creates the cert and the DNS CNAME.
+
 ## Alternatives considered
 
 - **Custom Backstage image from day 1 (the OpenChoreo path).** Rejected for Phase 3; revisit in 3.5. Rationale above.
