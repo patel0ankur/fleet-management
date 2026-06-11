@@ -2,9 +2,15 @@ import { Construct } from 'constructs';
 import { Stack, StackProps, CfnOutput, Arn } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { HelmChart, KubernetesManifest } from 'aws-cdk-lib/aws-eks-v2';
-import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
+import {
+  AwsCustomResource,
+  AwsCustomResourcePolicy,
+  PhysicalResourceId,
+  PhysicalResourceIdReference,
+} from 'aws-cdk-lib/custom-resources';
 import { BootstrapStack } from './01-bootstrap-stack';
 import { EksCapability } from '../constructs/eks-capability';
+import { FleetEks } from '../constructs/fleet-eks';
 import { PlatformConfig } from '../config/types';
 
 export interface PlatformStackProps extends StackProps {
@@ -349,6 +355,139 @@ export class PlatformStack extends Stack {
 
     new CfnOutput(this, 'CapabilitiesEnabled', {
       value: Object.entries(enabled).filter(([, v]) => v).map(([k]) => k).join(','),
+    });
+
+    if (config.spec.developerPortal?.enabled) {
+      this.addBackstageBootstrap(config, fleetEks);
+    }
+  }
+
+  /**
+   * Phase 3 - bootstrap items for the Backstage developer portal that only
+   * CDK can do. The Helm chart, Argo Application, namespace, SecretProviderClass
+   * and values all live in fleet-gitops under clusters/control/40-backstage/.
+   *
+   * Three responsibilities:
+   *   1. IAM role with trust pods.eks.amazonaws.com, scoped to read the two
+   *      Secrets Manager secrets (GitHub token, OIDC client secret).
+   *   2. Pod Identity association binding namespace=backstage SA=backstage
+   *      to the role.
+   *   3. IdC customer-managed application that Backstage signs users into.
+   *      The Argo CD capability creates its own; the Backstage one needs to
+   *      be created here via sso-admin APIs.
+   */
+  private addBackstageBootstrap(config: PlatformConfig, eks: FleetEks) {
+    const dp = config.spec.developerPortal!;
+
+    const role = new iam.Role(this, 'BackstageRole', {
+      roleName: `fleet-${config.metadata.name}-backstage`,
+      description: 'Fleet Backstage workload role - reads platform secrets via ASCP.',
+      assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
+      inlinePolicies: {
+        readSecrets: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              actions: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],
+              resources: [dp.githubTokenSecretArn!, dp.oidcClientSecretArn!],
+            }),
+          ],
+        }),
+      },
+    });
+    role.assumeRolePolicy?.addStatements(new iam.PolicyStatement({
+      actions: ['sts:AssumeRole', 'sts:TagSession'],
+      principals: [new iam.ServicePrincipal('pods.eks.amazonaws.com')],
+    }));
+
+    eks.addPodIdentity(this, {
+      id: 'BackstagePodIdentity',
+      namespace: 'backstage',
+      serviceAccount: 'backstage',
+      role,
+    });
+
+    // IdC customer-managed application. The application is the trust
+    // boundary; assignments grant a group access; the per-app PutApplicationGrant
+    // configures the OAuth/OIDC issuer flows. AWS surfaces the issuer URL +
+    // client_id post-create; the operator pastes those into the secret in
+    // Secrets Manager out-of-band (same pattern as gitops.tokenSecretArn).
+    const appName = `fleet-${config.metadata.name}-backstage`;
+    const idcApp = new AwsCustomResource(this, 'BackstageIdcApplication', {
+      installLatestAwsSdk: false,
+      onCreate: {
+        service: 'SSOAdmin',
+        action: 'CreateApplication',
+        parameters: {
+          ApplicationProviderArn: 'arn:aws:sso::aws:applicationProvider/custom',
+          InstanceArn: config.spec.identity.idc.instanceArn,
+          Name: appName,
+          Description: 'Fleet Backstage developer portal (Phase 3)',
+        },
+        physicalResourceId: PhysicalResourceId.fromResponse('ApplicationArn'),
+      },
+      onDelete: {
+        service: 'SSOAdmin',
+        action: 'DeleteApplication',
+        parameters: {
+          ApplicationArn: new PhysicalResourceIdReference(),
+        },
+      },
+      policy: AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: [
+            'sso:CreateApplication',
+            'sso:DeleteApplication',
+            'sso:DescribeApplication',
+            'sso:TagResource',
+          ],
+          resources: ['*'],
+        }),
+      ]),
+    });
+
+    const idcAppArn = idcApp.getResponseField('ApplicationArn');
+
+    const idcAssignment = new AwsCustomResource(this, 'BackstageIdcAssignment', {
+      installLatestAwsSdk: false,
+      onCreate: {
+        service: 'SSOAdmin',
+        action: 'CreateApplicationAssignment',
+        parameters: {
+          ApplicationArn: idcAppArn,
+          PrincipalId: config.spec.identity.idc.adminGroupId,
+          PrincipalType: config.spec.identity.idc.adminGroupType ?? 'GROUP',
+        },
+        physicalResourceId: PhysicalResourceId.of(`${appName}-admin-assignment`),
+      },
+      onDelete: {
+        service: 'SSOAdmin',
+        action: 'DeleteApplicationAssignment',
+        parameters: {
+          ApplicationArn: idcAppArn,
+          PrincipalId: config.spec.identity.idc.adminGroupId,
+          PrincipalType: config.spec.identity.idc.adminGroupType ?? 'GROUP',
+        },
+      },
+      policy: AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: [
+            'sso:CreateApplicationAssignment',
+            'sso:DeleteApplicationAssignment',
+          ],
+          resources: ['*'],
+        }),
+      ]),
+    });
+    idcAssignment.node.addDependency(idcApp);
+
+    new CfnOutput(this, 'BackstageRoleArn', { value: role.roleArn });
+    new CfnOutput(this, 'BackstageIdcApplicationArn', { value: idcAppArn });
+    new CfnOutput(this, 'BackstageHost', { value: dp.host! });
+    new CfnOutput(this, 'BackstageNextSteps', {
+      value:
+        'After deploy: open IdC console -> Applications -> ' + appName +
+        ' -> set assignment method, configure OIDC trusted token issuer, copy clientId/clientSecret into ' +
+        (dp.oidcClientSecretArn ?? '<oidcClientSecretArn>'),
     });
   }
 }
