@@ -84,21 +84,11 @@ export class FleetEks extends Construct {
         })),
         subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       });
-      // The aws-ebs-csi-driver add-on talks AWS APIs from the controller
-      // pods. Without IRSA/Pod Identity wired for the add-on's SA the
-      // controller falls back to the node IAM role; that role needs
-      // AmazonEBSCSIDriverPolicy or PVCs stay Pending with
-      // 'UnauthorizedOperation: ec2:DescribeAvailabilityZones'.
-      // The policy lives under service-role/, which fromAwsManagedPolicyName
-      // does NOT auto-prefix; pass the full ARN.
-      // Phase 7 hardening switches to a per-add-on Pod Identity.
-      nodegroup.role.addManagedPolicy(
-        iam.ManagedPolicy.fromManagedPolicyArn(
-          this,
-          `${ng.name}-EbsCsiPolicy`,
-          'arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy',
-        ),
-      );
+      // NOTE: the EBS CSI *controller* gets its credentials via Pod Identity
+      // (see the add-on loop below), NOT the node role - controller pods run
+      // on the pod network and can't reach IMDS to assume the node role. The
+      // node DaemonSet uses the node role over hostNetwork, but it only needs
+      // the volume-attach permissions already in AmazonEKSWorkerNodePolicy.
       nodegroups.push(nodegroup);
     }
 
@@ -108,7 +98,7 @@ export class FleetEks extends Construct {
     // version strings. preserveOnDelete: false keeps teardown clean (the
     // default true orphans the add-on when the stack is destroyed).
     //
-    // Two non-obvious settings, both learned the hard way:
+    // Three non-obvious settings, all learned the hard way:
     //
     //  - resolveConflicts OVERWRITE: the cluster is created with
     //    bootstrapSelfManagedAddons (the default), so EKS self-installs
@@ -117,11 +107,33 @@ export class FleetEks extends Construct {
     //    managed add-on take ownership instead of failing the deploy.
     //
     //  - DependsOn nodegroups: coredns and aws-ebs-csi-driver run
-    //    controller Deployments that need schedulable nodes. The EBS CSI
-    //    controller also needs the node role's AmazonEBSCSIDriverPolicy to
-    //    be attached. Ordering the add-ons after the nodegroups guarantees
-    //    both (Ready nodes + fully-policied node role) so the add-ons don't
-    //    come up DEGRADED on first deploy.
+    //    controller Deployments that need schedulable nodes. Ordering the
+    //    add-ons after the nodegroups means they don't come up Degraded for
+    //    lack of anywhere to schedule.
+    //
+    //  - Pod Identity for aws-ebs-csi-driver: the EBS CSI *controller* runs
+    //    on the pod network, so it cannot reach IMDS to assume the node
+    //    role - it MUST get credentials via EKS Pod Identity bound to its
+    //    service account (ebs-csi-controller-sa). The association is
+    //    declared on the add-on itself (podIdentityAssociations) so the
+    //    CloudFormation execution role creates it via iam:PassRole; doing it
+    //    out-of-band requires PassRole on the human operator, which is often
+    //    blocked by an SCP/permission boundary. The node DaemonSet does use
+    //    the node role (hostNetwork -> IMDS works), but the controller is
+    //    the one that calls CreateVolume/AttachVolume, so this is required.
+    const podIdentityRoles: Record<string, iam.IManagedPolicy[]> = {
+      'aws-ebs-csi-driver': [
+        iam.ManagedPolicy.fromManagedPolicyArn(
+          this,
+          'EbsCsiControllerPolicy',
+          'arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy',
+        ),
+      ],
+    };
+    const addonServiceAccount: Record<string, string> = {
+      'aws-ebs-csi-driver': 'ebs-csi-controller-sa',
+    };
+
     for (const addonName of [
       'vpc-cni',
       'coredns',
@@ -138,6 +150,29 @@ export class FleetEks extends Construct {
       cfnAddon.resolveConflicts = 'OVERWRITE';
       for (const ng of nodegroups) {
         addon.node.addDependency(ng);
+      }
+
+      // Wire a dedicated IAM role + Pod Identity association for add-ons
+      // whose controller needs AWS API access from the pod network.
+      const managedPolicies = podIdentityRoles[addonName];
+      if (managedPolicies) {
+        const addonRole = new iam.Role(this, `AddonRole-${addonName}`, {
+          description: `Fleet ${addonName} add-on controller role (EKS Pod Identity)`,
+          assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
+          managedPolicies,
+        });
+        addonRole.assumeRolePolicy?.addStatements(new iam.PolicyStatement({
+          actions: ['sts:AssumeRole', 'sts:TagSession'],
+          principals: [new iam.ServicePrincipal('pods.eks.amazonaws.com')],
+        }));
+        // The Pod Identity agent add-on must exist before associations
+        // resolve. It's in the same loop, so depend on the cluster being
+        // up; the agent add-on is ordered by EKS, and associations are
+        // re-tried by the controller until the agent is ready.
+        cfnAddon.podIdentityAssociations = [{
+          roleArn: addonRole.roleArn,
+          serviceAccount: addonServiceAccount[addonName],
+        }];
       }
     }
   }
