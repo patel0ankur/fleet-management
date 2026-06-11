@@ -95,6 +95,21 @@ ingress:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
 postgresql:
   enabled: true
+  # Bitnami relocated its free image catalog to the `bitnamilegacy` repo in
+  # Aug 2025 and deleted the old tags from `docker.io/bitnami`. The Backstage
+  # chart 2.6.0 postgresql subchart still defaults to the now-missing
+  # `bitnami/postgresql:15.4.0-debian-11-r10`, so a fresh pod hits
+  # ImagePullBackOff. Pin the same tag from bitnamilegacy (verified present).
+  # allowInsecureImages lets the bitnami subchart accept a non-canonical
+  # registry without its image-verification guard failing the render.
+  # Phase 7 (RDS via ACK) removes the in-cluster database entirely.
+  global:
+    security:
+      allowInsecureImages: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: 15.4.0-debian-11-r10
   auth:
     username: bn_backstage
     database: bn_backstage

@@ -149,7 +149,17 @@ if [[ "$DP_ENABLED" == "true" ]]; then
     "$GITOPS/clusters/control/40-backstage/scaffolder/stateless-service-with-bucket/skeleton/"
   echo "    copied scaffolder skeleton (verbatim)"
 else
-  echo "    (developerPortal.enabled=false; skipping 40-backstage)"
+  # developerPortal disabled: actively REMOVE any previously-rendered
+  # 40-backstage so a stale directory doesn't keep getting deployed by the
+  # fleet-bootstrap Argo App (which syncs everything under clusters/control/
+  # regardless of the CDK flag). Without this, disabling the portal in
+  # platform.yaml leaves Backstage running in the cluster.
+  if [[ -d "$GITOPS/clusters/control/40-backstage" ]]; then
+    rm -rf "$GITOPS/clusters/control/40-backstage"
+    echo "    removed stale 40-backstage (developerPortal.enabled=false)"
+  else
+    echo "    (developerPortal.enabled=false; no 40-backstage to render)"
+  fi
 fi
 
 # Smoke fixture (opt-in; use --with-smoke). Without it, fresh adopters don't
