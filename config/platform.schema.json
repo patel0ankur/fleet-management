@@ -164,6 +164,31 @@
           "properties": {
             "curBucket": { "type": "string" }
           }
+        },
+        "developerPortal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "host": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+            },
+            "githubOrg": { "type": "string", "minLength": 1 },
+            "githubTokenSecretArn": {
+              "type": "string",
+              "pattern": "^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$"
+            },
+            "oidcClientSecretArn": {
+              "type": "string",
+              "pattern": "^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$"
+            },
+            "catalogRepoGlob": {
+              "type": "string",
+              "default": "projects/*/catalog-info.yaml"
+            }
+          }
         }
       }
     }

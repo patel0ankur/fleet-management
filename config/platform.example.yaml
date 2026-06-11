@@ -94,3 +94,22 @@ spec:
   # Phase 6 — wired in later.
   cost:
     curBucket: ""
+
+  # Phase 3 — Backstage developer portal. Set enabled=true and fill in the rest
+  # to install Backstage in-cluster with IdC OIDC + GitHub PR scaffolding.
+  developerPortal:
+    enabled: false
+    # Public hostname; CNAME this at your DNS provider to the ALB created by
+    # the Backstage Ingress. Operator-managed for now (Phase 3.5 adds a
+    # Route53 ACK record).
+    host: backstage.acme.example.com
+    # GitHub org or user that owns fleet-gitops; used to build PR URLs.
+    githubOrg: acme
+    # Secrets Manager ARNs the Backstage pod reads via Pod Identity + ASCP.
+    # Create both secrets manually before deploy:
+    #   - GitHub PAT with repo + pull_request scopes (or a GitHub App token)
+    #   - OIDC client secret issued by the IdC customer-managed application
+    #     (CDK creates the application; the secret is available in the IdC
+    #     console after the first deploy).
+    githubTokenSecretArn: ""
+    oidcClientSecretArn: ""

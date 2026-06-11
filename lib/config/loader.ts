@@ -68,6 +68,9 @@ function applyDefaults(c: PlatformConfig): void {
   if (!c.spec.identity.idc.adminGroupType) {
     c.spec.identity.idc.adminGroupType = CONFIG_DEFAULTS.idc.adminGroupType;
   }
+  if (c.spec.developerPortal?.enabled && !c.spec.developerPortal.catalogRepoGlob) {
+    c.spec.developerPortal.catalogRepoGlob = CONFIG_DEFAULTS.developerPortal.catalogRepoGlob;
+  }
 }
 
 function postValidate(c: PlatformConfig): void {
@@ -118,5 +121,20 @@ function postValidate(c: PlatformConfig): void {
   const isSsh = /^(git@|ssh:\/\/)/.test(c.spec.gitops.repoUrl);
   if (isSsh && !c.spec.gitops.sshKeySecretArn) {
     throw new Error(`gitops.repoUrl is SSH but gitops.sshKeySecretArn is empty`);
+  }
+
+  if (c.spec.developerPortal?.enabled) {
+    const dp = c.spec.developerPortal;
+    const required: Array<[unknown, string]> = [
+      [dp.host, 'spec.developerPortal.host'],
+      [dp.githubOrg, 'spec.developerPortal.githubOrg'],
+      [dp.githubTokenSecretArn, 'spec.developerPortal.githubTokenSecretArn'],
+      [dp.oidcClientSecretArn, 'spec.developerPortal.oidcClientSecretArn'],
+    ];
+    for (const [val, name] of required) {
+      if (!val || typeof val !== 'string' || val.length === 0) {
+        throw new Error(`platform.yaml: ${name} is required when developerPortal.enabled is true`);
+      }
+    }
   }
 }

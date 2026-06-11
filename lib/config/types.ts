@@ -71,6 +71,14 @@ export interface PlatformConfig {
     cost?: {
       curBucket?: string;
     };
+    developerPortal?: {
+      enabled: boolean;
+      host?: string;
+      githubOrg?: string;
+      githubTokenSecretArn?: string;
+      oidcClientSecretArn?: string;
+      catalogRepoGlob?: string;
+    };
   };
 }
 
@@ -98,5 +106,8 @@ export const CONFIG_DEFAULTS = {
   },
   idc: {
     adminGroupType: 'SSO_GROUP' as const,
+  },
+  developerPortal: {
+    catalogRepoGlob: 'projects/*/catalog-info.yaml',
   },
 } as const;
