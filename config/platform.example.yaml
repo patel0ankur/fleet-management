@@ -33,7 +33,9 @@ spec:
 
   eks:
     name: fleet-control
-    version: "1.31"
+    # Latest cleanly-supported EKS version. AL2023 node AMIs + latest add-ons
+    # are selected automatically. Supported: 1.32-1.35.
+    version: "1.35"
     # IAM principals that should get cluster-admin via Access Entries.
     # Add the role/user that runs `fleetctl deploy` so kubectl works
     # without a manual `aws eks create-access-entry` follow-up.

@@ -1,10 +1,9 @@
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as kms from 'aws-cdk-lib/aws-kms';
 import * as eks from 'aws-cdk-lib/aws-eks-v2';
-import { CfnPodIdentityAssociation } from 'aws-cdk-lib/aws-eks';
-import { KubectlV31Layer } from '@aws-cdk/lambda-layer-kubectl-v31';
+import { CfnAddon, CfnPodIdentityAssociation } from 'aws-cdk-lib/aws-eks';
+import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
 import { NodeGroupConfig } from '../config/types';
 
 export interface FleetEksProps {
@@ -13,7 +12,6 @@ export interface FleetEksProps {
   vpc: ec2.IVpc;
   nodeGroups: NodeGroupConfig[];
   publicAccessCidrs: string[];
-  secretsKey: kms.IKey;
   /**
    * IAM principal ARNs that get cluster-admin via Access Entries. Without
    * this, only the CDK CFN execution role (which created the cluster) has
@@ -38,7 +36,7 @@ export class FleetEks extends Construct {
       ? eks.EndpointAccess.PUBLIC_AND_PRIVATE.onlyFrom(...props.publicAccessCidrs)
       : eks.EndpointAccess.PUBLIC_AND_PRIVATE;
 
-    const kubectlLayer = new KubectlV31Layer(this, 'KubectlLayer');
+    const kubectlLayer = new KubectlV35Layer(this, 'KubectlLayer');
 
     this.cluster = new eks.Cluster(this, 'Cluster', {
       clusterName: props.clusterName,
@@ -48,7 +46,6 @@ export class FleetEks extends Construct {
       endpointAccess,
       defaultCapacityType: eks.DefaultCapacityType.NODEGROUP,
       defaultCapacity: 0,
-      secretsEncryptionKey: props.secretsKey,
       kubectlProviderOptions: {
         kubectlLayer,
       },
@@ -61,11 +58,21 @@ export class FleetEks extends Construct {
       this.cluster.grantClusterAdmin(`Admin-${this.sanitizeId(arn)}`, arn);
     }
 
-    // Managed node groups.
+    // Managed node groups. AL2023 is the only AMI option going forward;
+    // EKS support for AL2 ended 2025-11-26 and EKS does not publish AL2
+    // AMIs for K8s >= 1.33.
+    //
+    // We deliberately do NOT set `nodegroupName`. Any property change that
+    // CFN models as 'replace' (e.g. amiType, capacityType) creates a new
+    // nodegroup before deleting the old one - an explicit name causes a
+    // 409 AlreadyExists collision. CFN-generated names work fine because
+    // operators reference nodegroups by node labels (fleet.role) rather
+    // than by EKS API name.
+    const nodegroups: eks.Nodegroup[] = [];
     for (const ng of props.nodeGroups) {
-      this.cluster.addNodegroupCapacity(ng.name, {
-        nodegroupName: ng.name,
+      const nodegroup = this.cluster.addNodegroupCapacity(ng.name, {
         instanceTypes: ng.instanceTypes.map(t => new ec2.InstanceType(t)),
+        amiType: eks.NodegroupAmiType.AL2023_X86_64_STANDARD,
         minSize: ng.minSize,
         maxSize: ng.maxSize,
         desiredSize: ng.desiredSize ?? ng.minSize,
@@ -77,14 +84,62 @@ export class FleetEks extends Construct {
         })),
         subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       });
+      // The aws-ebs-csi-driver add-on talks AWS APIs from the controller
+      // pods. Without IRSA/Pod Identity wired for the add-on's SA the
+      // controller falls back to the node IAM role; that role needs
+      // AmazonEBSCSIDriverPolicy or PVCs stay Pending with
+      // 'UnauthorizedOperation: ec2:DescribeAvailabilityZones'.
+      // The policy lives under service-role/, which fromAwsManagedPolicyName
+      // does NOT auto-prefix; pass the full ARN.
+      // Phase 7 hardening switches to a per-add-on Pod Identity.
+      nodegroup.role.addManagedPolicy(
+        iam.ManagedPolicy.fromManagedPolicyArn(
+          this,
+          `${ng.name}-EbsCsiPolicy`,
+          'arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy',
+        ),
+      );
+      nodegroups.push(nodegroup);
     }
 
-    // Pin add-on versions explicitly so cdk diff is meaningful.
-    new eks.Addon(this, 'AddonVpcCni',           { cluster: this.cluster, addonName: 'vpc-cni' });
-    new eks.Addon(this, 'AddonCoreDns',          { cluster: this.cluster, addonName: 'coredns' });
-    new eks.Addon(this, 'AddonKubeProxy',        { cluster: this.cluster, addonName: 'kube-proxy' });
-    new eks.Addon(this, 'AddonEbsCsi',           { cluster: this.cluster, addonName: 'aws-ebs-csi-driver' });
-    new eks.Addon(this, 'AddonPodIdentityAgent', { cluster: this.cluster, addonName: 'eks-pod-identity-agent' });
+    // Managed add-ons. addonVersion is intentionally left unset so EKS
+    // installs the latest version compatible with the cluster's K8s version
+    // - the cluster always lands on current add-ons without us tracking
+    // version strings. preserveOnDelete: false keeps teardown clean (the
+    // default true orphans the add-on when the stack is destroyed).
+    //
+    // Two non-obvious settings, both learned the hard way:
+    //
+    //  - resolveConflicts OVERWRITE: the cluster is created with
+    //    bootstrapSelfManagedAddons (the default), so EKS self-installs
+    //    vpc-cni / kube-proxy / coredns first. Installing the *managed*
+    //    add-on on top hits a field-ownership conflict; OVERWRITE lets the
+    //    managed add-on take ownership instead of failing the deploy.
+    //
+    //  - DependsOn nodegroups: coredns and aws-ebs-csi-driver run
+    //    controller Deployments that need schedulable nodes. The EBS CSI
+    //    controller also needs the node role's AmazonEBSCSIDriverPolicy to
+    //    be attached. Ordering the add-ons after the nodegroups guarantees
+    //    both (Ready nodes + fully-policied node role) so the add-ons don't
+    //    come up DEGRADED on first deploy.
+    for (const addonName of [
+      'vpc-cni',
+      'coredns',
+      'kube-proxy',
+      'aws-ebs-csi-driver',
+      'eks-pod-identity-agent',
+    ]) {
+      const addon = new eks.Addon(this, `Addon-${addonName}`, {
+        cluster: this.cluster,
+        addonName,
+        preserveOnDelete: false,
+      });
+      const cfnAddon = addon.node.defaultChild as CfnAddon;
+      cfnAddon.resolveConflicts = 'OVERWRITE';
+      for (const ng of nodegroups) {
+        addon.node.addDependency(ng);
+      }
+    }
   }
 
   private sanitizeId(arn: string): string {
@@ -94,10 +149,10 @@ export class FleetEks extends Construct {
 
   private parseVersion(v: string): eks.KubernetesVersion {
     const map: Record<string, eks.KubernetesVersion> = {
-      '1.30': eks.KubernetesVersion.V1_30,
-      '1.31': eks.KubernetesVersion.V1_31,
       '1.32': eks.KubernetesVersion.V1_32,
       '1.33': eks.KubernetesVersion.V1_33,
+      '1.34': eks.KubernetesVersion.V1_34,
+      '1.35': eks.KubernetesVersion.V1_35,
     };
     const out = map[v];
     if (!out) {

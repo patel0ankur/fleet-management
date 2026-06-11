@@ -63,7 +63,7 @@
           "additionalProperties": false,
           "properties": {
             "name": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9-]{0,99}$" },
-            "version": { "type": "string", "pattern": "^1\\.(3[0-9]|[4-9][0-9])$" },
+            "version": { "type": "string", "enum": ["1.32", "1.33", "1.34", "1.35"], "default": "1.35" },
             "adminPrincipalArns": {
               "type": "array",
               "uniqueItems": true,

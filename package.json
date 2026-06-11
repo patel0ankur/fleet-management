@@ -30,10 +30,10 @@
     "typescript": "~5.5.4"
   },
   "dependencies": {
-    "@aws-cdk/lambda-layer-kubectl-v31": "^2.1.0",
+    "@aws-cdk/lambda-layer-kubectl-v35": "^2.2.2",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "aws-cdk-lib": "2.240.0",
+    "aws-cdk-lib": "^2.258.1",
     "constructs": "^10.4.2",
     "js-yaml": "^4.1.0"
   }
