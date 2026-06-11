@@ -1,7 +1,6 @@
 import { Construct } from 'constructs';
 import { Stack, StackProps, CfnOutput, Duration, RemovalPolicy } from 'aws-cdk-lib';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
-import * as kms from 'aws-cdk-lib/aws-kms';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { FleetVpc } from '../constructs/fleet-vpc';
 import { FleetEks } from '../constructs/fleet-eks';
@@ -16,12 +15,16 @@ export interface BootstrapStackProps extends StackProps {
  *
  * Provisions the substrate Fleet runs on:
  *   - VPC + endpoints
- *   - EKS control cluster (managed nodegroups, Pod Identity, KMS-encrypted secrets)
+ *   - EKS control cluster (managed nodegroups, Pod Identity)
  *   - ECR repos for Fleet-managed images
- *   - KMS keys (EKS secrets, ECR encryption)
  *
  * After Phase 1 this stack should rarely change. EKS version bumps and new
  * regions are the main reasons.
+ *
+ * NOTE: This is a non-prod workshop substrate. KMS envelope encryption for
+ * EKS secrets and ECR images is intentionally omitted (EKS secrets fall back
+ * to AWS-managed encryption at rest; ECR uses AES256). Re-introduce
+ * customer-managed KMS keys for production in Phase 7 hardening.
  */
 export class BootstrapStack extends Stack {
   public readonly fleetVpc: FleetVpc;
@@ -31,22 +34,6 @@ export class BootstrapStack extends Stack {
   constructor(scope: Construct, id: string, props: BootstrapStackProps) {
     super(scope, id, props);
     const { config } = props;
-
-    // KMS — EKS secrets envelope encryption.
-    const eksSecretsKey = new kms.Key(this, 'EksSecretsKey', {
-      alias: `alias/fleet/${config.metadata.name}/eks`,
-      description: 'Fleet EKS secrets envelope encryption',
-      enableKeyRotation: true,
-      removalPolicy: RemovalPolicy.RETAIN,
-    });
-
-    // KMS — ECR image encryption.
-    const ecrKey = new kms.Key(this, 'EcrKey', {
-      alias: `alias/fleet/${config.metadata.name}/ecr`,
-      description: 'Fleet ECR image encryption',
-      enableKeyRotation: true,
-      removalPolicy: RemovalPolicy.RETAIN,
-    });
 
     // VPC.
     this.fleetVpc = new FleetVpc(this, 'Network', {
@@ -62,23 +49,22 @@ export class BootstrapStack extends Stack {
       vpc: this.fleetVpc.vpc,
       nodeGroups: config.spec.eks.nodeGroups,
       publicAccessCidrs: config.spec.network.publicAccessCidrs,
-      secretsKey: eksSecretsKey,
       adminPrincipalArns: config.spec.eks.adminPrincipalArns ?? [],
     });
 
     // ECR repos. Pre-created here so Phase 3+ image builds have a destination.
+    // AES256 (the ECR default) is fine for non-prod; Phase 7 switches to KMS.
     this.ecrRepos = {};
     for (const name of ['backstage', 'cost-exporter', 'incident-enricher']) {
       this.ecrRepos[name] = new ecr.Repository(this, `Ecr${this.titleCase(name)}`, {
         repositoryName: `fleet/${name}`,
         imageScanOnPush: true,
-        encryption: ecr.RepositoryEncryption.KMS,
-        encryptionKey: ecrKey,
         lifecycleRules: [
           { description: 'keep last 30 images', maxImageCount: 30 },
           { description: 'expire untagged after 14 days', tagStatus: ecr.TagStatus.UNTAGGED, maxImageAge: Duration.days(14) },
         ],
-        removalPolicy: RemovalPolicy.RETAIN,
+        removalPolicy: RemovalPolicy.DESTROY,
+        emptyOnDelete: true,
       });
     }
 
@@ -126,7 +112,6 @@ export class BootstrapStack extends Stack {
     new CfnOutput(this, 'ClusterEndpoint', { value: this.fleetEks.cluster.clusterEndpoint });
     new CfnOutput(this, 'VpcId', { value: this.fleetVpc.vpc.vpcId });
     new CfnOutput(this, 'EcrBackstageUri', { value: this.ecrRepos.backstage.repositoryUri });
-    new CfnOutput(this, 'KmsEksKeyArn', { value: eksSecretsKey.keyArn });
   }
 
   private titleCase(s: string): string {
