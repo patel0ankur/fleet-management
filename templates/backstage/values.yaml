@@ -95,6 +95,15 @@ backstage:
         runIn: 'local'
       publisher:
         type: 'local'
+    # The stock bundle also initializes the kubernetes plugin, which fails
+    # with 'Kubernetes configuration is missing' if no kubernetes block is
+    # present. Provide an empty cluster locator so the plugin starts with no
+    # clusters wired. Phase 3.5 (custom image) adds real cluster access via
+    # the Backstage SA's Pod Identity to surface workloads in the UI.
+    kubernetes:
+      serviceLocatorMethod:
+        type: 'multiTenant'
+      clusterLocatorMethods: []
 ingress:
   enabled: true
   className: alb
