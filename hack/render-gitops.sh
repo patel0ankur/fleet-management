@@ -62,6 +62,11 @@ HOST="$(read_yaml spec.developerPortal.host)"
 ORG_GH="$(read_yaml spec.developerPortal.githubOrg)"
 GITHUB_TOKEN_SECRET_ARN="$(read_yaml spec.developerPortal.githubTokenSecretArn)"
 OIDC_CLIENT_SECRET_ARN="$(read_yaml spec.developerPortal.oidcClientSecretArn)"
+# Derive the IdC instance ID (the trailing path segment of the instance ARN)
+# for Backstage's OIDC metadataUrl. Format:
+# arn:aws:sso:::instance/ssoins-XXXXXXXX -> ssoins-XXXXXXXX
+IDC_INSTANCE_ARN="$(read_yaml spec.identity.idc.instanceArn)"
+IDC_INSTANCE_ID="${IDC_INSTANCE_ARN##*/}"
 
 if [[ -z "$ORG" || -z "$CLUSTER_NAME" || -z "$REGION" || -z "$ACCOUNT" ]]; then
   echo "could not extract org/cluster/region/account from $CONFIG" >&2
@@ -95,6 +100,7 @@ substitute() {
     -e "s|{{ *ORG_GH *}}|$ORG_GH|g" \
     -e "s|{{ *GITHUB_TOKEN_SECRET_ARN *}}|$GITHUB_TOKEN_SECRET_ARN|g" \
     -e "s|{{ *OIDC_CLIENT_SECRET_ARN *}}|$OIDC_CLIENT_SECRET_ARN|g" \
+    -e "s|{{ *IDC_INSTANCE_ID *}}|$IDC_INSTANCE_ID|g" \
     "$src" > "$dst"
   echo "    rendered $src -> $dst"
 }

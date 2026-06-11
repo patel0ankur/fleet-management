@@ -447,6 +447,12 @@ export class PlatformStack extends Stack {
 
     const idcAppArn = idcApp.getResponseField('ApplicationArn');
 
+    // The Argo CD capability's rbacRoleMappings use SSO_GROUP / SSO_USER,
+    // but the sso-admin:CreateApplicationAssignment API expects the bare
+    // GROUP / USER. Translate.
+    const idcPrincipalType = (config.spec.identity.idc.adminGroupType ?? 'SSO_GROUP') === 'SSO_USER'
+      ? 'USER' : 'GROUP';
+
     const idcAssignment = new AwsCustomResource(this, 'BackstageIdcAssignment', {
       installLatestAwsSdk: false,
       onCreate: {
@@ -455,7 +461,7 @@ export class PlatformStack extends Stack {
         parameters: {
           ApplicationArn: idcAppArn,
           PrincipalId: config.spec.identity.idc.adminGroupId,
-          PrincipalType: config.spec.identity.idc.adminGroupType ?? 'GROUP',
+          PrincipalType: idcPrincipalType,
         },
         physicalResourceId: PhysicalResourceId.of(`${appName}-admin-assignment`),
       },
@@ -465,7 +471,7 @@ export class PlatformStack extends Stack {
         parameters: {
           ApplicationArn: idcAppArn,
           PrincipalId: config.spec.identity.idc.adminGroupId,
-          PrincipalType: config.spec.identity.idc.adminGroupType ?? 'GROUP',
+          PrincipalType: idcPrincipalType,
         },
       },
       policy: AwsCustomResourcePolicy.fromStatements([

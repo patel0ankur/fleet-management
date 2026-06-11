@@ -56,7 +56,7 @@ backstage:
       providers:
         oidc:
           production:
-            metadataUrl: https://identitycenter.amazonaws.com/ssoins-PLACEHOLDER/.well-known/openid-configuration
+            metadataUrl: https://identitycenter.amazonaws.com/{{ IDC_INSTANCE_ID }}/.well-known/openid-configuration
             clientId: fleet-{{ CLUSTER_NAME }}-backstage
             clientSecret: ${AUTH_OIDC_CLIENT_SECRET}
             prompt: auto
