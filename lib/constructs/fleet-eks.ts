@@ -1,4 +1,7 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { Construct } from 'constructs';
+import { Stack } from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as eks from 'aws-cdk-lib/aws-eks-v2';
@@ -184,6 +187,74 @@ export class FleetEks extends Construct {
         }];
       }
     }
+
+    // AWS Load Balancer Controller - fulfills `ingressClassName: alb` and
+    // Service type=LoadBalancer (NLB). Not a managed EKS add-on, so it's a
+    // Helm chart with its own IAM role + Pod Identity (same pattern as the
+    // EBS CSI controller: runs on the pod network, needs creds via Pod
+    // Identity, not IMDS).
+    this.installAwsLoadBalancerController(props.vpc);
+  }
+
+  /**
+   * Install the AWS Load Balancer Controller via Helm, wired to a dedicated
+   * IAM role through EKS Pod Identity. Required for any ALB Ingress or NLB
+   * Service in the cluster (e.g. the Backstage portal's Ingress).
+   */
+  private installAwsLoadBalancerController(vpc: ec2.IVpc): void {
+    const policyJson = JSON.parse(fs.readFileSync(
+      path.join(__dirname, '../policies/aws-load-balancer-controller-iam-policy.json'),
+      'utf8',
+    ));
+
+    const role = new iam.Role(this, 'AlbControllerRole', {
+      description: 'AWS Load Balancer Controller role (EKS Pod Identity)',
+      assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
+    });
+    role.assumeRolePolicy?.addStatements(new iam.PolicyStatement({
+      actions: ['sts:AssumeRole', 'sts:TagSession'],
+      principals: [new iam.ServicePrincipal('pods.eks.amazonaws.com')],
+    }));
+    // Attach the official controller policy (16 statements) as an inline doc.
+    new iam.Policy(this, 'AlbControllerPolicy', {
+      document: iam.PolicyDocument.fromJson(policyJson),
+      roles: [role],
+    });
+
+    const sa = 'aws-load-balancer-controller';
+    this.addPodIdentity(this, {
+      id: 'AlbControllerPodIdentity',
+      namespace: 'kube-system',
+      serviceAccount: sa,
+      role,
+    });
+
+    const chart = new eks.HelmChart(this, 'AlbController', {
+      cluster: this.cluster,
+      chart: 'aws-load-balancer-controller',
+      repository: 'https://aws.github.io/eks-charts',
+      release: 'aws-load-balancer-controller',
+      // Chart 1.17.1 -> controller v2.17.1, matched to the IAM policy in
+      // lib/policies/. (The chart's 3.x line is a separate, newer track.)
+      version: '1.17.1',
+      namespace: 'kube-system',
+      wait: true,
+      values: {
+        clusterName: this.cluster.clusterName,
+        region: Stack.of(this).region,
+        vpcId: vpc.vpcId,
+        serviceAccount: { create: true, name: sa },
+        // The controller's own pods must schedule; the system nodegroup is
+        // tainted, so tolerate it (kube-system DaemonSet-style components do).
+        tolerations: [
+          { key: 'dedicated', value: 'system', operator: 'Equal', effect: 'NoSchedule' },
+        ],
+      },
+    });
+    // The controller pods need the Pod Identity association (and thus the
+    // pod-identity-agent add-on) to obtain AWS credentials. Helm waits on
+    // pod readiness, so ensure the association exists first.
+    chart.node.addDependency(role);
   }
 
   private sanitizeId(arn: string): string {
