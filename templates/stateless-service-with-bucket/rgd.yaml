@@ -121,6 +121,11 @@ spec:
           namespace: ${schema.spec.namespace}
           labels:
             app: ${schema.spec.name}
+            # Lets the Backstage kubernetes plugin map this workload to the
+            # catalog Component (the entity carries the matching annotation
+            # backstage.io/kubernetes-id). The plugin's resource page shows
+            # any object labelled with the entity's id.
+            backstage.io/kubernetes-id: ${schema.spec.name}
             # Reference the PodIdentityAssociation by name so kro orders this
             # Deployment after the PIA's readyWhen evaluates True. Carries no
             # runtime meaning; pure dependency-edge marker.
@@ -134,6 +139,7 @@ spec:
             metadata:
               labels:
                 app: ${schema.spec.name}
+                backstage.io/kubernetes-id: ${schema.spec.name}
             spec:
               serviceAccountName: ${serviceAccount.metadata.name}
               containers:
@@ -154,6 +160,9 @@ spec:
         metadata:
           name: ${schema.spec.name}
           namespace: ${schema.spec.namespace}
+          labels:
+            app: ${schema.spec.name}
+            backstage.io/kubernetes-id: ${schema.spec.name}
         spec:
           type: ClusterIP
           selector:

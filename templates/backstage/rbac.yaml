@@ -1,0 +1,58 @@
+# Read-only RBAC for the Backstage kubernetes plugin.
+#
+# The plugin runs in-cluster and authenticates as the `backstage` ServiceAccount
+# against https://kubernetes.default.svc. It needs read access to the workload
+# objects it surfaces on entity pages (Deployments/Pods/Services/etc) plus the
+# Fleet/kro/ACK custom resources so a Component page can show its provisioned
+# state. Read-only; no write/exec.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backstage-kubernetes-reader
+  labels:
+    fleet.platform.{{ ORG }}/component: backstage
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, configmaps, limitranges, resourcequotas]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [get, list]
+  # Fleet golden-path + kro/ACK resources, so a Component page can show the
+  # provisioned bucket / IAM / pod-identity alongside the workload.
+  - apiGroups: [kro.run]
+    resources: ["*"]
+    verbs: [get, list, watch]
+  - apiGroups:
+      - s3.services.k8s.aws
+      - iam.services.k8s.aws
+      - eks.services.k8s.aws
+    resources: ["*"]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backstage-kubernetes-reader
+  labels:
+    fleet.platform.{{ ORG }}/component: backstage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backstage-kubernetes-reader
+subjects:
+  - kind: ServiceAccount
+    name: backstage
+    namespace: backstage

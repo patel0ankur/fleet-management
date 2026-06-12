@@ -5,6 +5,10 @@ metadata:
   description: ${{ values.name }} - StatelessServiceWithBucket (scaffolded by Fleet Backstage)
   annotations:
     backstage.io/source-location: url:https://github.com/patel0ankur/fleet-gitops/blob/main/projects/${{ values.project }}/deployments/${{ values.name }}.yaml
+    # Tie this Component to its live K8s objects (Deployment/Service/Pods are
+    # labelled backstage.io/kubernetes-id=<name> by the kro RGD). The
+    # Kubernetes tab on this entity page then shows the running workload.
+    backstage.io/kubernetes-id: ${{ values.name }}
   labels:
     fleet.platform/kro-instance: ${{ values.name }}
 spec:

@@ -134,6 +134,8 @@ if [[ "$DP_ENABLED" == "true" ]]; then
     "$GITOPS/clusters/control/40-backstage/10-spc.yaml"
   substitute templates/backstage/serviceaccount.yaml \
     "$GITOPS/clusters/control/40-backstage/20-serviceaccount.yaml"
+  substitute templates/backstage/rbac.yaml \
+    "$GITOPS/clusters/control/40-backstage/50-rbac.yaml"
   substitute templates/backstage/application.yaml \
     "$GITOPS/clusters/control/40-backstage/30-application.yaml"
   substitute templates/backstage/values.yaml \

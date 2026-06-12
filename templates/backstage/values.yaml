@@ -110,15 +110,33 @@ backstage:
         runIn: 'local'
       publisher:
         type: 'local'
-    # The stock bundle also initializes the kubernetes plugin, which fails
-    # with 'Kubernetes configuration is missing' if no kubernetes block is
-    # present. Provide an empty cluster locator so the plugin starts with no
-    # clusters wired. Phase 3.5 (custom image) adds real cluster access via
-    # the Backstage SA's Pod Identity to surface workloads in the UI.
+    # Kubernetes plugin wired to THIS cluster (in-cluster auth). The Backstage
+    # pod talks to the local API server at kubernetes.default.svc using its own
+    # `backstage` ServiceAccount token (read RBAC granted by 50-rbac.yaml).
+    # Entity pages whose Component carries backstage.io/kubernetes-id show the
+    # live objects labelled with that id (the kro RGD stamps the label onto the
+    # Deployment + Service). customResources surfaces the kro/ACK objects too.
     kubernetes:
       serviceLocatorMethod:
         type: 'multiTenant'
-      clusterLocatorMethods: []
+      clusterLocatorMethods:
+        - type: 'config'
+          clusters:
+            - name: fleet-control
+              url: https://kubernetes.default.svc
+              # authProvider serviceAccount + no explicit token => the plugin
+              # reads the pod's own in-cluster SA token at
+              # /var/run/secrets/kubernetes.io/serviceaccount/token and the
+              # cluster CA from the same dir. No secret wiring needed.
+              authProvider: serviceAccount
+              skipTLSVerify: false
+      customResources:
+        - group: 'kro.run'
+          apiVersion: 'v1alpha1'
+          plural: 'statelessservicewithbuckets'
+        - group: 's3.services.k8s.aws'
+          apiVersion: 'v1alpha1'
+          plural: 'buckets'
 ingress:
   enabled: true
   className: alb
