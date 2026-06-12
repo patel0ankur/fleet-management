@@ -24,7 +24,6 @@ export class DevOpsAgentService {
   private constructor(
     private readonly agentSpaceId: string,
     region: string,
-    private readonly appBaseUrl: string,
   ) {
     this.client = agentSpaceId
       ? new DevOpsAgentClient({ region })
@@ -44,8 +43,7 @@ export class DevOpsAgentService {
       asStr(config.getOptional('aws.region')) ||
       'us-east-1';
     const agentSpaceId = asStr(conf?.getOptional('agentSpaceId'));
-    const appBaseUrl = asStr(config.getOptional('app.baseUrl')) || 'https://backstage';
-    return new DevOpsAgentService(agentSpaceId, region, appBaseUrl);
+    return new DevOpsAgentService(agentSpaceId, region);
   }
 
   get configured(): boolean {
@@ -121,12 +119,12 @@ export class DevOpsAgentService {
     }
     const priority = (opts.priority || 'HIGH').toUpperCase();
     // Embed the tag values in the title so text-based ListBacklogTasks
-    // matching associates this investigation back to the entity.
+    // matching associates this investigation back to the entity. We do NOT
+    // set `reference`: it's optional, and its `system` field is validated
+    // against registered data-plane integrations (a free-text 'backstage'
+    // is rejected with "Unknown data plane service name"). The entityRef +
+    // tags live in the title/description, which our list filter matches on.
     const title = `${opts.title} [${opts.tags}]`.slice(0, 400);
-    // ReferenceInput requires associationId, referenceId, referenceUrl, system
-    // (verified against API_ReferenceInput). associationId + referenceId must
-    // match ^[a-zA-Z0-9_.-]+$, so sanitize the entityRef for both.
-    const safeRef = opts.entityRef.replace(/[^a-zA-Z0-9_.-]+/g, '_');
     const res = await this.client.send(
       new CreateBacklogTaskCommand({
         agentSpaceId: this.agentSpaceId,
@@ -136,13 +134,6 @@ export class DevOpsAgentService {
         description:
           opts.description ||
           `Investigation started from Backstage for ${opts.entityRef} (tags: ${opts.tags}).`,
-        reference: {
-          system: 'backstage',
-          title: opts.entityRef,
-          associationId: safeRef,
-          referenceId: safeRef,
-          referenceUrl: `${this.appBaseUrl}/catalog/${opts.entityRef.replace(':', '/')}`,
-        },
       } as any),
     );
     const t: any = (res as any).task ?? {};
