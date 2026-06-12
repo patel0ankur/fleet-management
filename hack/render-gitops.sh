@@ -174,12 +174,9 @@ if [[ "$WITH_SMOKE" == "1" ]]; then
     "$GITOPS/projects/smoke-team/project.yaml"
   substitute samples/projects/smoke-team/deployments/hello.yaml \
     "$GITOPS/projects/smoke-team/deployments/hello.yaml"
-  if [[ "$DP_ENABLED" == "true" ]]; then
-    substitute samples/projects/smoke-team/catalog-info.yaml \
-      "$GITOPS/projects/smoke-team/catalog-info.yaml"
-    substitute samples/projects/smoke-team/components/hello.yaml \
-      "$GITOPS/projects/smoke-team/components/hello.yaml"
-  fi
+  # No catalog-info/components rendered: the FleetEntityProvider auto-derives
+  # the Group/System/Component for smoke-team from its kro instance once the
+  # workload is provisioned.
 else
   echo "    (skipping smoke fixture; pass --with-smoke to include it)"
 fi

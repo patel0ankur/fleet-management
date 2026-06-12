@@ -87,19 +87,12 @@ backstage:
       rules:
         - allow: [Group, User, System, Component, Template]
       locations:
-        # Project-level: Group + System (the team + bounded context). One per
-        # project, created with the project.
-        - type: url
-          target: https://github.com/{{ ORG_GH }}/fleet-gitops/blob/main/projects/*/catalog-info.yaml
-          rules:
-            - allow: [Group, User, System]
-        # Service-level: one Component file per scaffolded service (no overwrite
-        # when a project has multiple services).
-        - type: url
-          target: https://github.com/{{ ORG_GH }}/fleet-gitops/blob/main/projects/*/components/*.yaml
-          rules:
-            - allow: [Component]
-        # Shared org users (guest etc.) so Group memberships resolve.
+        # NOTE: Fleet Group/System/Component entities are NO LONGER read from
+        # hand-authored catalog-info.yaml files. The FleetEntityProvider
+        # (plugins/catalog-backend-module-fleet) auto-discovers them from kro
+        # StatelessServiceWithBucket instances in the cluster, with live
+        # kro-state / bucket-arn / cost-center annotations. Only shared org
+        # users and the scaffolder Template are file-based.
         - type: url
           target: https://github.com/{{ ORG_GH }}/fleet-gitops/blob/main/clusters/control/40-backstage/org/users.yaml
           rules:
