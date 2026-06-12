@@ -40,3 +40,11 @@ config/platform.*.yaml
 .env
 .env.*
 !.env.example
+
+# Backstage app build artifacts
+backstage/node_modules/
+backstage/packages/*/node_modules/
+backstage/packages/*/dist/
+backstage/dist-types/
+backstage/.yarn/cache/
+backstage/.yarn/install-state.gz

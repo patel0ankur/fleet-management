@@ -1,0 +1,14 @@
+# Build-context ignore for Dockerfile.fleet (the multi-stage, build-from-source
+# image). Unlike the default .dockerignore — which excludes packages/*/src and
+# plugins because the stock Dockerfile copies pre-built dist — this build
+# compiles from source, so source MUST be included. We only drop installed
+# artifacts and local cruft.
+.git
+node_modules
+packages/*/node_modules
+plugins/*/node_modules
+.yarn/cache
+.yarn/install-state.gz
+dist
+packages/*/dist
+*.local.yaml

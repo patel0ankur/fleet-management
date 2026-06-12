@@ -1,0 +1,54 @@
+# Multi-stage, self-contained build for the Fleet Backstage image.
+#
+# Unlike the default packages/backend/Dockerfile (which expects the host to
+# have already run `yarn install && yarn tsc && yarn build:backend`), this
+# builds everything in-container so it works regardless of host Node version.
+# Build context = the backstage/ app root.
+#
+#   docker buildx build --platform linux/amd64 -f Dockerfile.fleet -t <ecr>/fleet/backstage:<tag> .
+#
+# Why this image exists: the upstream backstage/backstage chart image does not
+# register the scaffolder GitHub module (publish:github:pull-request). This
+# build is produced from `@backstage/create-app` 1.51, whose backend wires that
+# module in (see packages/backend/src/index.ts), giving us working PR-based
+# scaffolding. Phase 3.5 deliverable per ADR 0008.
+
+# ---- Stage 1: build the backend bundle ----
+FROM node:22-bookworm-slim AS build
+ENV PYTHON=/usr/bin/python3
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 g++ build-essential libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY . .
+# Full install (dev deps needed to compile), then typecheck + bundle the backend.
+# NOT --immutable: this is a freshly-scaffolded app whose seed yarn.lock isn't
+# fully resolved for the exact dep set, and we build from source rather than a
+# locked CI artifact. Let yarn complete the lockfile in-image.
+RUN yarn install --network-timeout 600000
+RUN yarn tsc
+RUN yarn build:backend
+
+# ---- Stage 2: lean runtime ----
+FROM node:22-bookworm-slim AS runtime
+ENV PYTHON=/usr/bin/python3
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 g++ build-essential libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+USER node
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--no-node-snapshot"
+
+# Yarn plumbing + skeleton (package.json graph) for a production-only install.
+COPY --from=build --chown=node:node /app/.yarn ./.yarn
+COPY --from=build --chown=node:node /app/.yarnrc.yml /app/backstage.json /app/yarn.lock /app/package.json ./
+COPY --from=build --chown=node:node /app/packages/backend/dist/skeleton.tar.gz ./
+RUN tar xzf skeleton.tar.gz && rm skeleton.tar.gz
+RUN yarn workspaces focus --all --production && rm -rf "$(yarn cache clean)"
+
+# The built backend bundle + runtime app-config files.
+COPY --from=build --chown=node:node /app/packages/backend/dist/bundle.tar.gz /app/app-config*.yaml ./
+RUN tar xzf bundle.tar.gz && rm bundle.tar.gz
+
+CMD ["node", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.production.yaml"]
