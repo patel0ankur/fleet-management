@@ -103,7 +103,6 @@ spec:
       input:
         repoContentsUrl: ${{ steps.pr.output.repoContentsUrl }}
         catalogInfoPath: '/projects/${{ parameters.project | parseEntityRef | pick(''name'') }}/catalog-info.yaml'
-        optional: true
 
   output:
     links:
