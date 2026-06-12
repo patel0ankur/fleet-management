@@ -69,17 +69,27 @@ agentSpaceId, region}` -> rendered into the chart's
   "EKS Access Setup" capability). Set `agentSpaceId` in platform.yaml to light
   it up; no redeploy of the plugin needed beyond a Backstage roll.
 - **Tag matching is text-based:** `ListBacklogTasks` has no structured tag
-  filter, so the backend matches investigations whose title/description/
-  reference contain the tag values. Good enough to surface; a precise mapping
-  would use the investigation `reference.referenceId` we could set when opening
-  one (future).
+  filter, so the backend matches investigations whose title/description contain
+  the tag values. When the plugin *opens* an investigation it embeds the tag
+  set in the title (`Investigate <name> [service=…,project=…]`) so the same
+  Component's list filter picks it up. We do **not** set `CreateBacklogTask`'s
+  `reference` (ReferenceInput): although it looks like the natural place for the
+  entity ref, its `system` field is validated server-side against *registered
+  data-plane integrations* (a free-text `'backstage'` is rejected with
+  `Unknown data plane service name`), so the reference is unusable for an
+  arbitrary external system. Title-embedding is the working mechanism.
 - **Withdrawn pipeline removed:** IncidentBinding CRD, incident-enricher Lambda,
   IncidentPipeline construct, incident RBAC, and the provider's incident code
   were all deleted (commit "revert(phase5)...").
 
 ## Future
-- When an agentSpace exists, optionally let Fleet *open* investigations
-  (`CreateBacklogTask`) from an action, setting `reference.referenceId` to the
-  entity ref for exact matching.
+- ~~Let Fleet *open* investigations from an action.~~ **Shipped:** the Incidents
+  tab has a **"Start investigation"** button → `POST /api/devops-agent/
+  investigations` → `CreateBacklogTask` (taskType `INVESTIGATION`) in the
+  configured agentSpace. The entity's tags are embedded in the task title so it
+  surfaces back on the same Component's tab.
 - Surface `ListJournalRecords` / `GetRecommendation` (the RCA detail) in a
   drawer, like SecurityHub's FindingDrawer.
+- Wire a structured entity↔investigation link if/when DevOps Agent exposes one
+  (the `reference` field requires a registered data-plane `system`, so it can't
+  carry an arbitrary Backstage entity ref today — see Consequences).
