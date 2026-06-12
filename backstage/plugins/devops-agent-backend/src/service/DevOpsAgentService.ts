@@ -24,6 +24,7 @@ export class DevOpsAgentService {
   private constructor(
     private readonly agentSpaceId: string,
     region: string,
+    private readonly appBaseUrl: string,
   ) {
     this.client = agentSpaceId
       ? new DevOpsAgentClient({ region })
@@ -43,7 +44,8 @@ export class DevOpsAgentService {
       asStr(config.getOptional('aws.region')) ||
       'us-east-1';
     const agentSpaceId = asStr(conf?.getOptional('agentSpaceId'));
-    return new DevOpsAgentService(agentSpaceId, region);
+    const appBaseUrl = asStr(config.getOptional('app.baseUrl')) || 'https://backstage';
+    return new DevOpsAgentService(agentSpaceId, region, appBaseUrl);
   }
 
   get configured(): boolean {
@@ -121,6 +123,10 @@ export class DevOpsAgentService {
     // Embed the tag values in the title so text-based ListBacklogTasks
     // matching associates this investigation back to the entity.
     const title = `${opts.title} [${opts.tags}]`.slice(0, 400);
+    // ReferenceInput requires associationId, referenceId, referenceUrl, system
+    // (verified against API_ReferenceInput). associationId + referenceId must
+    // match ^[a-zA-Z0-9_.-]+$, so sanitize the entityRef for both.
+    const safeRef = opts.entityRef.replace(/[^a-zA-Z0-9_.-]+/g, '_');
     const res = await this.client.send(
       new CreateBacklogTaskCommand({
         agentSpaceId: this.agentSpaceId,
@@ -133,9 +139,9 @@ export class DevOpsAgentService {
         reference: {
           system: 'backstage',
           title: opts.entityRef,
-          // referenceId must match ^[a-zA-Z0-9_.-]+$ - sanitize the entityRef
-          // (colons/slashes are invalid). The full ref is kept in `title`.
-          referenceId: opts.entityRef.replace(/[^a-zA-Z0-9_.-]+/g, '_'),
+          associationId: safeRef,
+          referenceId: safeRef,
+          referenceUrl: `${this.appBaseUrl}/catalog/${opts.entityRef.replace(':', '/')}`,
         },
       } as any),
     );
