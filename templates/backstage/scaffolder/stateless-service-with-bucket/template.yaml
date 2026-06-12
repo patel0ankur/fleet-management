@@ -92,7 +92,23 @@ spec:
           up and Argo reconciles it within ~3 minutes. kro fans out into
           Deployment + Service + S3 Bucket + IAM Role + Pod Identity.
 
+    # Register the new Component in the Backstage catalog immediately, reading
+    # the catalog-info.yaml from the PR branch. Without this, the service
+    # wouldn't appear in the catalog until the PR is merged AND the location
+    # scan next runs - the scaffolder emits a kro CR (for provisioning) plus a
+    # catalog-info.yaml (for Backstage visibility); this step ingests the latter.
+    - id: register
+      name: Register in catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.pr.output.repoContentsUrl }}
+        catalogInfoPath: '/projects/${{ parameters.project | parseEntityRef | pick(''name'') }}/catalog-info.yaml'
+        optional: true
+
   output:
     links:
       - title: Pull request
         url: ${{ steps.pr.output.remoteUrl }}
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}
