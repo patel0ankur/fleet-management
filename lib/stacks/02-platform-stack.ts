@@ -11,6 +11,7 @@ import {
 import { BootstrapStack } from './01-bootstrap-stack';
 import { EksCapability } from '../constructs/eks-capability';
 import { FleetEks } from '../constructs/fleet-eks';
+import { IncidentPipeline } from '../constructs/incident-pipeline';
 import { PlatformConfig } from '../config/types';
 
 export interface PlatformStackProps extends StackProps {
@@ -369,6 +370,21 @@ export class PlatformStack extends Stack {
 
     if (config.spec.developerPortal?.enabled) {
       this.addBackstageBootstrap(config, fleetEks);
+    }
+
+    // Phase 5 - incident/RCA pipeline (DevOps Agent). Gated on
+    // observability.devopsAgent.enabled. Reuses the incident-enricher ECR
+    // repo from the bootstrap stack.
+    const da = config.spec.observability?.devopsAgent;
+    if (da?.enabled) {
+      new IncidentPipeline(this, 'IncidentPipeline', {
+        enricherRepo: bootstrap.ecrRepos['incident-enricher'],
+        imageTag: 'latest',
+        fleetEks,
+        agentSpaceId: da.agentSpaceId ?? '',
+        agentRegion: da.region ?? config.spec.aws.region,
+        pollSeconds: da.pollSeconds ?? 120,
+      });
     }
   }
 

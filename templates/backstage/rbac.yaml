@@ -41,6 +41,11 @@ rules:
       - eks.services.k8s.aws
     resources: ["*"]
     verbs: [get, list, watch]
+  # Fleet platform CRs incl. IncidentBindings, so the FleetEntityProvider can
+  # surface incidents on Component pages.
+  - apiGroups: [platform.{{ ORG }}]
+    resources: ["*"]
+    verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

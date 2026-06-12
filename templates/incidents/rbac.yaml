@@ -1,0 +1,35 @@
+# RBAC for the Phase 5 incident pipeline.
+#
+# The incident-enricher Lambda authenticates to the cluster API with its IAM
+# role, mapped (via an EKS access entry created in the CDK IncidentPipeline
+# construct) to the Kubernetes group `fleet-incident-writers`. This ClusterRole
+# lets that group read IncidentBindings and patch their /status subresource.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fleet-incident-writer
+  labels:
+    fleet.platform.{{ ORG }}/component: incidents
+rules:
+  - apiGroups: [platform.{{ ORG }}]
+    resources: [incidentbindings]
+    verbs: [get, list, watch]
+  - apiGroups: [platform.{{ ORG }}]
+    resources: [incidentbindings/status]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fleet-incident-writer
+  labels:
+    fleet.platform.{{ ORG }}/component: incidents
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fleet-incident-writer
+subjects:
+  # Matches the kubernetesGroups on the Lambda's EKS access entry.
+  - kind: Group
+    name: fleet-incident-writers
+    apiGroup: rbac.authorization.k8s.io

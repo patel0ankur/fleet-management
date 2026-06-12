@@ -89,9 +89,24 @@ spec:
     kro:    true
     argocd: true
 
-  # Phase 5 — wired in later, validated as ARN format here.
+  # Phase 5 — incident detection + RCA via AWS DevOps Agent.
   observability:
+    # HMAC webhook secret (fallback path). The primary path uses the
+    # DevOps Agent API (CreateBacklogTask), not this webhook.
     devopsAgentWebhookSecretArn: ""
+    devopsAgent:
+      # When enabled, an EventBridge rule routes CloudWatch alarms (and
+      # fleet.argo events) to the incident-enricher Lambda, which opens a
+      # DevOps Agent INVESTIGATION and records it on the matching
+      # IncidentBinding CR. Surfaces in Backstage.
+      enabled: false
+      # Created once out-of-band (DevOps Agent console / CreateAgentSpace).
+      # Also run the agent's "EKS Access Setup" capability so it can pull
+      # this cluster's telemetry. Empty agentSpaceId => incidents are
+      # recorded in CR status but the agent API call is skipped.
+      agentSpaceId: ""
+      region: us-east-1
+      pollSeconds: 120
 
   # Phase 6 — wired in later.
   cost:

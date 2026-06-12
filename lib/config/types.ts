@@ -67,6 +67,12 @@ export interface PlatformConfig {
     };
     observability?: {
       devopsAgentWebhookSecretArn?: string;
+      devopsAgent?: {
+        enabled?: boolean;
+        agentSpaceId?: string;
+        region?: string;
+        pollSeconds?: number;
+      };
     };
     cost?: {
       curBucket?: string;

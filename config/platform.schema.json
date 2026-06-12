@@ -155,7 +155,25 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "devopsAgentWebhookSecretArn": { "type": "string" }
+            "devopsAgentWebhookSecretArn": { "type": "string" },
+            "devopsAgent": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "agentSpaceId": {
+                  "type": "string",
+                  "pattern": "^$|^[a-zA-Z0-9-]{1,64}$",
+                  "description": "DevOps Agent agentSpace id (created once in-console/CLI). Empty = pipeline records incidents in CR status but skips the agent API call."
+                },
+                "region": {
+                  "type": "string",
+                  "pattern": "^$|^[a-z]{2}-[a-z]+-[0-9]$",
+                  "description": "Region for the DevOps Agent API (webhook endpoints are us-east-1)."
+                },
+                "pollSeconds": { "type": "integer", "minimum": 30, "default": 120 }
+              }
+            }
           }
         },
         "cost": {

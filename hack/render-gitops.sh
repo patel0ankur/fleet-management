@@ -108,6 +108,12 @@ substitute() {
 # CRDs
 substitute crds/0010-project.yaml    "$GITOPS/clusters/control/20-fleet-crds/project-crd.yaml"
 substitute crds/0020-deployment.yaml "$GITOPS/clusters/control/20-fleet-crds/deployment-crd.yaml"
+substitute crds/0030-incidentbinding.yaml "$GITOPS/clusters/control/20-fleet-crds/incidentbinding-crd.yaml"
+
+# Incident pipeline RBAC (Phase 5) - ClusterRole for the fleet-incident-writers
+# group that the enricher Lambda's EKS access entry maps to.
+substitute templates/incidents/rbac.yaml \
+  "$GITOPS/clusters/control/60-incidents/rbac.yaml"
 
 # kro RGDs
 substitute templates/project/rgd.yaml \
