@@ -12,7 +12,11 @@ import MenuIcon from '@material-ui/icons/Menu';
 import SearchIcon from '@material-ui/icons/Search';
 import { SidebarSearchModal } from '@backstage/plugin-search';
 import { UserSettingsSignInAvatar } from '@backstage/plugin-user-settings';
-import { NotificationsSidebarItem } from '@backstage/plugin-notifications';
+// NotificationsSidebarItem removed: the notifications frontend plugin's apiRef
+// (plugin.notifications.service) isn't wired in this app, and it depends on the
+// signals service we don't run. Fleet doesn't use notifications; including the
+// sidebar item crashes the whole frontend with NotImplementedError. Re-add with
+// the full notifications + signals frontend wiring if/when we want it.
 
 export const SidebarContent = NavContentBlueprint.make({
   params: {
@@ -40,8 +44,6 @@ export const SidebarContent = NavContentBlueprint.make({
             </SidebarScrollWrapper>
           </SidebarGroup>
           <SidebarSpace />
-          <SidebarDivider />
-          <NotificationsSidebarItem />
           <SidebarDivider />
           <SidebarGroup
             label="Settings"
