@@ -19,7 +19,7 @@ import {
  */
 export class DevOpsAgentService {
   private readonly client?: DevOpsAgentClient;
-  private readonly consoleBase: string;
+  private readonly appBase: string;
 
   private constructor(
     private readonly agentSpaceId: string,
@@ -28,7 +28,14 @@ export class DevOpsAgentService {
     this.client = agentSpaceId
       ? new DevOpsAgentClient({ region })
       : undefined;
-    this.consoleBase = `https://${region}.console.aws.amazon.com/devops-agent/home?region=${region}`;
+    // Investigations live in the DevOps Agent *web app*, which is served from a
+    // per-agentSpace subdomain (https://<agentSpaceId>.aidevops.global.app.aws),
+    // NOT the regional AWS console. There is no public per-investigation
+    // deep-link route, so every row links to the agentSpace home where the
+    // investigation can be opened.
+    this.appBase = agentSpaceId
+      ? `https://${agentSpaceId}.aidevops.global.app.aws/home`
+      : '';
   }
 
   static fromConfig(config: Config, _opts: { logger: LoggerService }) {
@@ -89,7 +96,7 @@ export class DevOpsAgentService {
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
           executionId: t.executionId,
-          url: `${this.consoleBase}#/investigations/${t.taskId}`,
+          url: this.appBase || undefined,
         });
       }
       nextToken = (res as any).nextToken;
@@ -145,7 +152,7 @@ export class DevOpsAgentService {
       taskType: t.taskType ?? 'INVESTIGATION',
       createdAt: t.createdAt,
       executionId: t.executionId,
-      url: `${this.consoleBase}#/investigations/${t.taskId}`,
+      url: this.appBase || undefined,
     };
   }
 }
