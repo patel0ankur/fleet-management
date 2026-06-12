@@ -92,27 +92,17 @@ spec:
           up and Argo reconciles it within ~3 minutes. kro fans out into
           Deployment + Service + S3 Bucket + IAM Role + Pod Identity.
 
-    # Register the new Component in the Backstage catalog immediately, reading
-    # the catalog-info.yaml from the PR branch. Without this, the service
-    # wouldn't appear in the catalog until the PR is merged AND the location
-    # scan next runs - the scaffolder emits a kro CR (for provisioning) plus a
-    # catalog-info.yaml (for Backstage visibility); this step ingests the latter.
-    - id: register
-      name: Register in catalog
-      action: catalog:register
-      input:
-        # publish:github:pull-request does NOT output repoContentsUrl (only
-        # remoteUrl/pullRequestNumber/targetBranchName), so use the
-        # catalogInfoUrl subschema with an absolute blob URL on the PR branch.
-        # optional:true lets registration tolerate eventual-consistency on the
-        # just-pushed branch.
-        catalogInfoUrl: 'https://github.com/{{ ORG_GH }}/fleet-gitops/blob/scaffolder/${{ parameters.project | parseEntityRef | pick(''name'') }}-${{ parameters.name }}/projects/${{ parameters.project | parseEntityRef | pick(''name'') }}/catalog-info.yaml'
-        optional: true
+    # NOTE: no catalog:register step. Registering from the PR branch fights
+    # the GitOps merge model - the branch is ephemeral (deleted on merge, so a
+    # branch-registered location 404s permanently) and GitHub read-consistency
+    # lags right after the push. Instead the scaffolder emits a catalog-info.yaml
+    # alongside the kro CR; once the PR merges to main, the existing
+    # catalog.locations glob (projects/*/catalog-info.yaml on main) ingests the
+    # Component automatically. Provisioning (kro CR) and catalog visibility
+    # (catalog-info) both flow from the same merge.
 
   output:
     links:
       - title: Pull request
         url: ${{ steps.pr.output.remoteUrl }}
-      - title: Open in catalog
-        icon: catalog
         entityRef: ${{ steps.register.output.entityRef }}

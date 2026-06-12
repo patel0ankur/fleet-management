@@ -4,10 +4,9 @@ metadata:
   name: ${{ values.name }}
   description: ${{ values.name }} - StatelessServiceWithBucket (scaffolded by Fleet Backstage)
   annotations:
-    # Point the catalog entity at the kro CR it provisions, so the entity
-    # page links back to the source manifest in fleet-gitops.
-    backstage.io/source-location: url:https://github.com/{{ ORG_GH }}/fleet-gitops/blob/main/projects/${{ values.project }}/deployments/${{ values.name }}.yaml
-    fleet.platform.{{ ORG }}/kro-instance: ${{ values.name }}
+    backstage.io/source-location: url:https://github.com/patel0ankur/fleet-gitops/blob/main/projects/${{ values.project }}/deployments/${{ values.name }}.yaml
+  labels:
+    fleet.platform/kro-instance: ${{ values.name }}
 spec:
   type: service
   lifecycle: production
