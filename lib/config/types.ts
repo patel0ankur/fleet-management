@@ -71,7 +71,6 @@ export interface PlatformConfig {
         enabled?: boolean;
         agentSpaceId?: string;
         region?: string;
-        pollSeconds?: number;
       };
     };
     cost?: {

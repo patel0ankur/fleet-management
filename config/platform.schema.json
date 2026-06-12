@@ -159,19 +159,19 @@
             "devopsAgent": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Backstage DevOps Agent plugin config (renders incidents/RCA on entity pages, reading the aidevops API at request time). Modeled on the awslabs SecurityHub plugin.",
               "properties": {
                 "enabled": { "type": "boolean", "default": false },
                 "agentSpaceId": {
                   "type": "string",
                   "pattern": "^$|^[a-zA-Z0-9-]{1,64}$",
-                  "description": "DevOps Agent agentSpace id (created once in-console/CLI). Empty = pipeline records incidents in CR status but skips the agent API call."
+                  "description": "DevOps Agent agentSpace id (created once in-console/CLI). The plugin queries this agentSpace's investigations."
                 },
                 "region": {
                   "type": "string",
                   "pattern": "^$|^[a-z]{2}-[a-z]+-[0-9]$",
-                  "description": "Region for the DevOps Agent API (webhook endpoints are us-east-1)."
-                },
-                "pollSeconds": { "type": "integer", "minimum": 30, "default": 120 }
+                  "description": "Region for the DevOps Agent API."
+                }
               }
             }
           }

@@ -15,12 +15,6 @@ const KRO_GROUP = 'kro.run';
 const KRO_VERSION = 'v1alpha1';
 const KRO_PLURAL = 'statelessservicewithbuckets';
 const ANNOTATION_PREFIX = 'fleet.platform.acme';
-const IB_GROUP = 'platform.acme';
-const IB_VERSION = 'v1alpha1';
-const IB_PLURAL = 'incidentbindings';
-const SEVERITY_RANK: Record<string, number> = {
-  CRITICAL: 5, HIGH: 4, MEDIUM: 3, LOW: 2, MINIMAL: 1,
-};
 
 /**
  * Reads Fleet kro instances (StatelessServiceWithBucket) directly from the
@@ -81,27 +75,6 @@ export class FleetEntityProvider implements EntityProvider {
     const items: any[] = res?.body?.items ?? res?.items ?? [];
     this.logger.info(`Fleet provider: found ${items.length} kro instance(s)`);
 
-    // Incidents (Phase 5): index active incidents by workload name so each
-    // Component can show its open incidents + RCA links. Best-effort: if the
-    // CRD/RBAC isn't present yet, log and continue without incident data.
-    const incidentsByWorkload = new Map<string, any[]>();
-    try {
-      const ibRes: any = await this.k8s.listClusterCustomObject(
-        IB_GROUP, IB_VERSION, IB_PLURAL,
-      );
-      const ibs: any[] = ibRes?.body?.items ?? ibRes?.items ?? [];
-      for (const ib of ibs) {
-        const wl = ib.spec?.deploymentRef?.name;
-        const active = ib.status?.activeIncidents ?? [];
-        if (wl && active.length) incidentsByWorkload.set(wl, active);
-      }
-      this.logger.info(
-        `Fleet provider: ${incidentsByWorkload.size} workload(s) with active incidents`,
-      );
-    } catch (e) {
-      this.logger.info(`Fleet provider: no incident data (${e})`);
-    }
-
     const namespaces = new Set<string>();
     const components: ComponentEntity[] = [];
 
@@ -126,39 +99,6 @@ export class FleetEntityProvider implements EntityProvider {
       if (bucketArn) annotations[`${ANNOTATION_PREFIX}/bucket-arn`] = bucketArn;
       if (costCenter) annotations[`${ANNOTATION_PREFIX}/cost-center`] = costCenter;
 
-      const links: Array<{ url: string; title: string }> = [];
-      if (bucketArn) {
-        links.push({
-          url: `https://s3.console.aws.amazon.com/s3/buckets/${bucketArn.split(':::')[1] ?? ''}`,
-          title: 'S3 bucket',
-        });
-      }
-
-      // Phase 5: surface active incidents + RCA links on the Component.
-      const incidents = incidentsByWorkload.get(name) ?? [];
-      if (incidents.length) {
-        annotations[`${ANNOTATION_PREFIX}/incidents-open`] = String(incidents.length);
-        const maxSev = incidents
-          .map((i: any) => i.severity ?? 'MINIMAL')
-          .reduce((a: string, b: string) => (SEVERITY_RANK[b] > SEVERITY_RANK[a] ? b : a), 'MINIMAL');
-        annotations[`${ANNOTATION_PREFIX}/incident-max-severity`] = maxSev;
-        const statuses = incidents
-          .map((i: any) => i.executionStatus)
-          .filter(Boolean);
-        if (statuses.length) {
-          annotations[`${ANNOTATION_PREFIX}/incident-status`] = statuses.join(',');
-        }
-        for (const inc of incidents) {
-          if (inc.rcaUrl) {
-            links.push({ url: inc.rcaUrl, title: `RCA: ${inc.title ?? inc.incidentId}` });
-          }
-        }
-      }
-
-      const tags: string[] = [];
-      if (image) tags.push(`image:${image.split('/').pop()?.split(':')[0] ?? 'app'}`);
-      if (incidents.length) tags.push('incident');
-
       const component: ComponentEntity = {
         apiVersion: 'backstage.io/v1alpha1',
         kind: 'Component',
@@ -166,12 +106,12 @@ export class FleetEntityProvider implements EntityProvider {
           name,
           namespace: 'default',
           title: name,
-          description:
-            `${name} - StatelessServiceWithBucket (kro: ${state}` +
-            (incidents.length ? `, ${incidents.length} incident(s)` : '') + ')',
+          description: `${name} - StatelessServiceWithBucket (kro: ${state})`,
           annotations,
-          links: links.length ? links : undefined,
-          tags: tags.length ? tags : undefined,
+          links: bucketArn
+            ? [{ url: `https://s3.console.aws.amazon.com/s3/buckets/${bucketArn.split(':::')[1] ?? ''}`, title: 'S3 bucket' }]
+            : undefined,
+          tags: image ? [`image:${image.split('/').pop()?.split(':')[0] ?? 'app'}`] : undefined,
         },
         spec: {
           type: 'service',
