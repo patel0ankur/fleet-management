@@ -212,3 +212,29 @@ if a version drifts.
   provider didn't register. Set the real secret (step 0b) and restart.
 - **Argo `OutOfSync`, "values file not found"** → the multi-source Helm Application's
   `$values` ref path is wrong; confirm two sources, one with `ref: values`.
+
+## Catalog visibility of scaffolded services (as built)
+
+The scaffolder emits TWO files per run into the PR:
+- `projects/<team>/deployments/<name>.yaml` — the `StatelessServiceWithBucket`
+  kro CR (provisioning; consumed by Argo + kro + ACK)
+- `projects/<team>/catalog-info.yaml` — a Backstage `Component` (visibility)
+
+Visibility is **merge-based**, not branch-based. The template intentionally has
+NO `catalog:register` step: registering from the PR branch fights GitOps
+(the branch is deleted on merge, so a branch-registered location 404s forever,
+and GitHub read-consistency lags right after the push). Instead, once the PR
+merges to `main`, the `catalog.locations` glob `projects/*/catalog-info.yaml`
+ingests the Component automatically (next scan, ~100s; restart to force).
+
+Gotchas hit during bring-up:
+- The skeleton `catalog-info.yaml` must NOT contain render-time `{{ ORG }}` /
+  `{{ ORG_GH }}` tokens. `render-gitops.sh` copies the scaffolder skeleton
+  **verbatim** (to preserve `${{ values.* }}` Nunjucks placeholders), so any
+  `{{ ... }}` survives into the scaffolded file and Backstage rejects the
+  entity with `annotations.<key> is not valid` (the `{{ }}` breaks the
+  annotation-key format). Use literal values or `${{ values.* }}` only.
+- Verify scaffolder action inputs/outputs against the RUNNING instance, not
+  docs: `GET /api/scaffolder/v2/actions` returns each action's exact input
+  and output JSON schema. `publish:github:pull-request` outputs only
+  `remoteUrl`, `pullRequestNumber`, `targetBranchName` (NOT `repoContentsUrl`).
