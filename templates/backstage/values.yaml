@@ -20,7 +20,7 @@ backstage:
     # (publish:github:pull-request) so PR-based scaffolding works. Phase 3.5.
     registry: "590443650088.dkr.ecr.us-east-1.amazonaws.com"
     repository: fleet/backstage
-    tag: "1.51.0-fleet2"
+    tag: "1.51.0-fleet3"
   extraVolumes:
     - name: backstage-secrets
       csi:
