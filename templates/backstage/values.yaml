@@ -52,10 +52,14 @@ backstage:
           user: bn_backstage
           database: bn_backstage
           password: ${POSTGRES_PASSWORD}
-    integrations:
-      github:
-        - host: github.com
-          token: ${GITHUB_TOKEN}
+    # No github integration token here on purpose. fleet-gitops is a PUBLIC
+    # repo, so catalog discovery + template reads work anonymously. Supplying
+    # a token means Backstage SENDS it on every GitHub call, and a placeholder
+    # (or any invalid) token turns those into 401s that silently break catalog
+    # ingestion. The scaffolder's publish:github:pull-request step DOES need a
+    # real token; when wiring that (Phase 3.5), add the integration back with a
+    # valid PAT/GitHub App and keep the repo reads working.
+    integrations: {}
     # Auth: guest sign-in (demo-grade). AWS IdC custom applications are
     # built for trusted-token-issuer / identity propagation, not generic
     # OIDC web-login for a third-party app like Backstage - so reusing the
