@@ -133,7 +133,9 @@ export class DevOpsAgentService {
         reference: {
           system: 'backstage',
           title: opts.entityRef,
-          referenceId: opts.entityRef,
+          // referenceId must match ^[a-zA-Z0-9_.-]+$ - sanitize the entityRef
+          // (colons/slashes are invalid). The full ref is kept in `title`.
+          referenceId: opts.entityRef.replace(/[^a-zA-Z0-9_.-]+/g, '_'),
         },
       } as any),
     );
