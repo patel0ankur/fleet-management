@@ -101,8 +101,13 @@ spec:
       name: Register in catalog
       action: catalog:register
       input:
-        repoContentsUrl: ${{ steps.pr.output.repoContentsUrl }}
-        catalogInfoPath: '/projects/${{ parameters.project | parseEntityRef | pick(''name'') }}/catalog-info.yaml'
+        # publish:github:pull-request does NOT output repoContentsUrl (only
+        # remoteUrl/pullRequestNumber/targetBranchName), so use the
+        # catalogInfoUrl subschema with an absolute blob URL on the PR branch.
+        # optional:true lets registration tolerate eventual-consistency on the
+        # just-pushed branch.
+        catalogInfoUrl: 'https://github.com/{{ ORG_GH }}/fleet-gitops/blob/scaffolder/${{ parameters.project | parseEntityRef | pick(''name'') }}-${{ parameters.name }}/projects/${{ parameters.project | parseEntityRef | pick(''name'') }}/catalog-info.yaml'
+        optional: true
 
   output:
     links:
