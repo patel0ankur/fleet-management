@@ -32,11 +32,16 @@ export class DevOpsAgentService {
 
   static fromConfig(config: Config, _opts: { logger: LoggerService }) {
     const conf = config.getOptionalConfig('aws.devopsAgent');
+    // Use getOptional (untyped) + coerce, NOT getOptionalString: Backstage's
+    // config reader throws "got empty-string, wanted string" on an empty
+    // value, and agentSpaceId is empty until an agentSpace is provisioned.
+    const asStr = (v: unknown): string =>
+      typeof v === 'string' ? v : '';
     const region =
-      conf?.getOptionalString('region') ??
-      config.getOptionalString('aws.region') ??
+      asStr(conf?.getOptional('region')) ||
+      asStr(config.getOptional('aws.region')) ||
       'us-east-1';
-    const agentSpaceId = conf?.getOptionalString('agentSpaceId') ?? '';
+    const agentSpaceId = asStr(conf?.getOptional('agentSpaceId'));
     return new DevOpsAgentService(agentSpaceId, region);
   }
 
