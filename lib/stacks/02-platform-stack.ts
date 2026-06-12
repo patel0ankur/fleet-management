@@ -416,6 +416,8 @@ export class PlatformStack extends Stack {
         actions: [
           'aidevops:ListBacklogTasks',
           'aidevops:GetBacklogTask',
+          // Lets a developer start an investigation from the Incidents tab.
+          'aidevops:CreateBacklogTask',
           'aidevops:ListExecutions',
           'aidevops:ListJournalRecords',
           'aidevops:GetRecommendation',

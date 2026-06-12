@@ -1,6 +1,7 @@
 import {
   DevOpsAgentClient,
   ListBacklogTasksCommand,
+  CreateBacklogTaskCommand,
 } from '@aws-sdk/client-devops-agent';
 import { LoggerService } from '@backstage/backend-plugin-api';
 import { Config } from '@backstage/config';
@@ -98,6 +99,54 @@ export class DevOpsAgentService {
       configured: true,
       agentSpaceId: this.agentSpaceId,
       incidents,
+    };
+  }
+
+  /**
+   * Start a DevOps Agent investigation for an entity. The entity's tags are
+   * embedded in the title + reference so the subsequent ListBacklogTasks
+   * filter picks it up on the same Component's Incidents tab.
+   */
+  async startInvestigation(opts: {
+    title: string;
+    description?: string;
+    priority?: string;
+    tags: string;
+    entityRef: string;
+  }): Promise<DevOpsAgentIncident> {
+    if (!this.client) {
+      throw new Error('DevOps Agent not configured (no agentSpaceId)');
+    }
+    const priority = (opts.priority || 'HIGH').toUpperCase();
+    // Embed the tag values in the title so text-based ListBacklogTasks
+    // matching associates this investigation back to the entity.
+    const title = `${opts.title} [${opts.tags}]`.slice(0, 400);
+    const res = await this.client.send(
+      new CreateBacklogTaskCommand({
+        agentSpaceId: this.agentSpaceId,
+        taskType: 'INVESTIGATION',
+        priority,
+        title,
+        description:
+          opts.description ||
+          `Investigation started from Backstage for ${opts.entityRef} (tags: ${opts.tags}).`,
+        reference: {
+          system: 'backstage',
+          title: opts.entityRef,
+          referenceId: opts.entityRef,
+        },
+      } as any),
+    );
+    const t: any = (res as any).task ?? {};
+    return {
+      taskId: t.taskId,
+      title: t.title ?? title,
+      status: t.status ?? 'CREATED',
+      priority: t.priority ?? priority,
+      taskType: t.taskType ?? 'INVESTIGATION',
+      createdAt: t.createdAt,
+      executionId: t.executionId,
+      url: `${this.consoleBase}#/investigations/${t.taskId}`,
     };
   }
 }
