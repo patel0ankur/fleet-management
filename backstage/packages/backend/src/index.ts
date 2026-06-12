@@ -36,6 +36,8 @@ backend.add(
 );
 // Fleet: auto-discover catalog entities from kro instances in the cluster.
 backend.add(import('@internal/plugin-catalog-backend-module-fleet'));
+// Fleet: DevOps Agent incidents/RCA backend (request-time aidevops API).
+backend.add(import('@internal/plugin-devops-agent-backend'));
 
 // See https://backstage.io/docs/features/software-catalog/configuration#subscribing-to-catalog-errors
 backend.add(import('@backstage/plugin-catalog-backend-module-logs'));

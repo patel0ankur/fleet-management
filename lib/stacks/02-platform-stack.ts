@@ -409,6 +409,23 @@ export class PlatformStack extends Stack {
       principals: [new iam.ServicePrincipal('pods.eks.amazonaws.com')],
     }));
 
+    // Phase 5: the DevOps Agent Backstage plugin reads investigations from the
+    // aidevops API at request time using this same Pod Identity role.
+    if (config.spec.observability?.devopsAgent?.enabled) {
+      role.addToPolicy(new iam.PolicyStatement({
+        actions: [
+          'aidevops:ListBacklogTasks',
+          'aidevops:GetBacklogTask',
+          'aidevops:ListExecutions',
+          'aidevops:ListJournalRecords',
+          'aidevops:GetRecommendation',
+          'aidevops:ListRecommendations',
+          'aidevops:ListAgentSpaces',
+        ],
+        resources: ['*'],
+      }));
+    }
+
     eks.addPodIdentity(this, {
       id: 'BackstagePodIdentity',
       namespace: 'backstage',

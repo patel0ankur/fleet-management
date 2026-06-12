@@ -8,6 +8,7 @@ import apiDocsPlugin from '@backstage/plugin-api-docs/alpha';
 import orgPlugin from '@backstage/plugin-org/alpha';
 import userSettingsPlugin from '@backstage/plugin-user-settings/alpha';
 import kubernetesPlugin from '@backstage/plugin-kubernetes/alpha';
+import devopsAgentPlugin from '@internal/plugin-devops-agent';
 import { navModule } from './modules/nav';
 
 // New frontend system: a plugin only mounts its routes if it's in `features`.
@@ -25,6 +26,7 @@ export default createApp({
     orgPlugin,
     userSettingsPlugin,
     kubernetesPlugin,
+    devopsAgentPlugin,
     navModule,
   ],
 });

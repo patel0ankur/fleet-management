@@ -95,6 +95,9 @@ export class FleetEntityProvider implements EntityProvider {
         'backstage.io/managed-by-origin-location': `fleet-provider:${ns}/${name}`,
         'backstage.io/kubernetes-id': name,
         [`${ANNOTATION_PREFIX}/kro-state`]: state,
+        // Opt this workload into the DevOps Agent "Incidents" tab; the backend
+        // filters investigations by these tag values.
+        'aws.amazon.com/devops-agent-tags': `service=${name},project=${ns}`,
       };
       if (bucketArn) annotations[`${ANNOTATION_PREFIX}/bucket-arn`] = bucketArn;
       if (costCenter) annotations[`${ANNOTATION_PREFIX}/cost-center`] = costCenter;
