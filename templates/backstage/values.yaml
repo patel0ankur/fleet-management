@@ -140,7 +140,15 @@ postgresql:
     # Secret deterministic so it always matches what initdb wrote.
     # Dev-grade: the DB is cluster-internal (ClusterIP, no external exposure)
     # and Phase 7 replaces it with RDS + an ASCP-mounted credential.
+    #
+    # BOTH passwords must be pinned. The subchart writes two keys into the
+    # backstage-postgresql Secret: `password` (the bn_backstage user) and
+    # `postgres-password` (the postgres superuser). Pinning only the user
+    # password leaves the admin one random, so every Argo sync re-renders a
+    # different postgres-password -> the Secret shows permanent OutOfSync
+    # drift. Pin both so the render is fully deterministic.
     password: fleet-backstage-local-dev
+    postgresPassword: fleet-backstage-admin-dev
   primary:
     persistence:
       size: 8Gi
