@@ -254,7 +254,7 @@ export class PlatformStack extends Stack {
                 // (see clusters/control/40-backstage/values.yaml). Argo
                 // would otherwise try to kubectl-apply them and fail with
                 // 'CRD not installed'.
-                exclude: '{**/scaffolder/**,**/values.yaml}',
+                exclude: '{**/scaffolder/**,**/values.yaml,**/org/**}',
               },
             },
             destination: {
