@@ -1,0 +1,10 @@
+# Shared org entities. The guest User exists so Group memberships resolve
+# (guest auth signs everyone in as user:default/guest). Real auth swaps this
+# for actual users discovered from the IdP.
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: guest
+  description: Guest user (demo auth)
+spec:
+  memberOf: []

@@ -140,6 +140,9 @@ if [[ "$DP_ENABLED" == "true" ]]; then
     "$GITOPS/clusters/control/40-backstage/30-application.yaml"
   substitute templates/backstage/values.yaml \
     "$GITOPS/clusters/control/40-backstage/values.yaml"
+  # Shared org users (guest) so Group memberships resolve in the catalog.
+  substitute templates/backstage/org/users.yaml \
+    "$GITOPS/clusters/control/40-backstage/org/users.yaml"
   # Scaffolder template (registered via catalog.locations in values.yaml).
   substitute templates/backstage/scaffolder/stateless-service-with-bucket/template.yaml \
     "$GITOPS/clusters/control/40-backstage/scaffolder/stateless-service-with-bucket/template.yaml"
@@ -174,6 +177,8 @@ if [[ "$WITH_SMOKE" == "1" ]]; then
   if [[ "$DP_ENABLED" == "true" ]]; then
     substitute samples/projects/smoke-team/catalog-info.yaml \
       "$GITOPS/projects/smoke-team/catalog-info.yaml"
+    substitute samples/projects/smoke-team/components/hello.yaml \
+      "$GITOPS/projects/smoke-team/components/hello.yaml"
   fi
 else
   echo "    (skipping smoke fixture; pass --with-smoke to include it)"
