@@ -56,18 +56,21 @@ backstage:
       github:
         - host: github.com
           token: ${GITHUB_TOKEN}
+    # Auth: guest sign-in (demo-grade). AWS IdC custom applications are
+    # built for trusted-token-issuer / identity propagation, not generic
+    # OIDC web-login for a third-party app like Backstage - so reusing the
+    # Argo IdC instance as a Backstage OIDC provider isn't a supported path
+    # (the Argo capability gets IdC SSO because AWS built that integration
+    # into the capability itself). For the workshop we use guest auth so the
+    # catalog + scaffolder UX is usable. Phase 3.5 wires real auth via the
+    # GitHub OAuth provider (same ecosystem as the catalog/scaffolder token)
+    # or an external OIDC IdP. dangerouslyAllowOutsideDevelopment is required
+    # because the backend runs with environment != development.
     auth:
       environment: production
       providers:
-        oidc:
-          production:
-            metadataUrl: https://identitycenter.amazonaws.com/{{ IDC_INSTANCE_ID }}/.well-known/openid-configuration
-            clientId: fleet-{{ CLUSTER_NAME }}-backstage
-            clientSecret: ${AUTH_OIDC_CLIENT_SECRET}
-            prompt: auto
-            signIn:
-              resolvers:
-                - resolver: emailMatchingUserEntityProfileEmail
+        guest:
+          dangerouslyAllowOutsideDevelopment: true
     catalog:
       rules:
         - allow: [Group, User, System, Component, Template]
