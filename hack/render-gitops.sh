@@ -64,6 +64,8 @@ GITHUB_TOKEN_SECRET_ARN="$(read_yaml spec.developerPortal.githubTokenSecretArn)"
 OIDC_CLIENT_SECRET_ARN="$(read_yaml spec.developerPortal.oidcClientSecretArn)"
 
 # Phase 5 - DevOps Agent plugin config (substituted into Backstage values).
+DEVOPS_AGENT_ENABLED="$(read_yaml spec.observability.devopsAgent.enabled)"
+[[ -z "$DEVOPS_AGENT_ENABLED" ]] && DEVOPS_AGENT_ENABLED="false"
 DEVOPS_AGENT_SPACE_ID="$(read_yaml spec.observability.devopsAgent.agentSpaceId)"
 DEVOPS_AGENT_REGION="$(read_yaml spec.observability.devopsAgent.region)"
 [[ -z "$DEVOPS_AGENT_REGION" ]] && DEVOPS_AGENT_REGION="$REGION"
@@ -106,6 +108,7 @@ substitute() {
     -e "s|{{ *GITHUB_TOKEN_SECRET_ARN *}}|$GITHUB_TOKEN_SECRET_ARN|g" \
     -e "s|{{ *OIDC_CLIENT_SECRET_ARN *}}|$OIDC_CLIENT_SECRET_ARN|g" \
     -e "s|{{ *IDC_INSTANCE_ID *}}|$IDC_INSTANCE_ID|g" \
+    -e "s|{{ *DEVOPS_AGENT_ENABLED *}}|$DEVOPS_AGENT_ENABLED|g" \
     -e "s|{{ *DEVOPS_AGENT_SPACE_ID *}}|$DEVOPS_AGENT_SPACE_ID|g" \
     -e "s|{{ *DEVOPS_AGENT_REGION *}}|$DEVOPS_AGENT_REGION|g" \
     "$src" > "$dst"

@@ -409,20 +409,46 @@ export class PlatformStack extends Stack {
       principals: [new iam.ServicePrincipal('pods.eks.amazonaws.com')],
     }));
 
-    // Phase 5: the DevOps Agent Backstage plugin reads investigations from the
-    // aidevops API at request time using this same Pod Identity role.
+    // Phase 5 (genai-shape): the DevOps Agent Backstage plugin offers an
+    // interactive chat tab. The plugin uses these aidevops actions at request
+    // time via the Backstage pod's Pod Identity role:
+    //   - ListAgentSpaces / CreateAgentSpace   on-demand provisioning of the
+    //                                          Fleet-default agentSpace the
+    //                                          first time a chat is opened
+    //   - GetAgentSpace                        status badge in the chat header
+    //   - CreateChat / SendMessage             the chat surface itself; the
+    //                                          reply streams back inside the
+    //                                          SendMessage event stream (there
+    //                                          is no transcript-read API)
+    //   - ListChats                            chat listing (future history UI)
+    //   - ListJournalRecords / GetRecommendation /
+    //     ListRecommendations / ListExecutions  citations the agent attaches
+    //                                            to chat replies
+    //   - {List,Create,Get}BacklogTask         optional escalation path: open
+    //                                          a long-running investigation
+    //                                          from the chat
     if (config.spec.observability?.devopsAgent?.enabled) {
       role.addToPolicy(new iam.PolicyStatement({
         actions: [
-          'aidevops:ListBacklogTasks',
-          'aidevops:GetBacklogTask',
-          // Lets a developer start an investigation from the Incidents tab.
-          'aidevops:CreateBacklogTask',
+          // AgentSpace lifecycle (lazy provisioning)
+          'aidevops:ListAgentSpaces',
+          'aidevops:CreateAgentSpace',
+          'aidevops:GetAgentSpace',
+          // Chat surface (primary). The assistant reply is delivered inside
+          // the SendMessage event stream - there is no ListChatMessages /
+          // GetChat / transcript-read operation in the API.
+          'aidevops:CreateChat',
+          'aidevops:SendMessage',
+          'aidevops:ListChats',
+          // RCA detail rendered as message references
           'aidevops:ListExecutions',
           'aidevops:ListJournalRecords',
           'aidevops:GetRecommendation',
           'aidevops:ListRecommendations',
-          'aidevops:ListAgentSpaces',
+          // Optional escalation path: open a backlog investigation from chat
+          'aidevops:ListBacklogTasks',
+          'aidevops:GetBacklogTask',
+          'aidevops:CreateBacklogTask',
         ],
         resources: ['*'],
       }));

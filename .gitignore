@@ -48,3 +48,6 @@ backstage/packages/*/dist/
 backstage/dist-types/
 backstage/.yarn/cache/
 backstage/.yarn/install-state.gz
+
+# Claude Code personal permission grants
+.claude/settings.local.json

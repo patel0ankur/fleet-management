@@ -1,2 +1,2 @@
 export { default } from './plugin';
-export { isDevOpsAgentAvailable } from './IncidentsContent';
+export { isDevOpsAgentAvailable } from './ChatContent';

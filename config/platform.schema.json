@@ -159,18 +159,28 @@
             "devopsAgent": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Backstage DevOps Agent plugin config (renders incidents/RCA on entity pages, reading the aidevops API at request time). Modeled on the awslabs SecurityHub plugin.",
+              "description": "Backstage DevOps Agent plugin config (Phase 5, genai-style chat tab on every workload). Modeled on awslabs/backstage-plugins-for-aws/plugins/genai. The plugin lazily provisions an agentSpace via CreateAgentSpace on first chat; pinning agentSpaceId is optional.",
               "properties": {
-                "enabled": { "type": "boolean", "default": false },
+                "enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "When true, Backstage shows the DevOps Agent chat tab on every workload entity and the CDK Backstage Pod Identity role gets aidevops:* actions."
+                },
+                "agentSpaceName": {
+                  "type": "string",
+                  "pattern": "^$|^[a-zA-Z0-9-]{1,64}$",
+                  "default": "fleet-default",
+                  "description": "Name used when the plugin lazily creates the Fleet-default agentSpace. Only relevant when agentSpaceId is empty."
+                },
                 "agentSpaceId": {
                   "type": "string",
                   "pattern": "^$|^[a-zA-Z0-9-]{1,64}$",
-                  "description": "DevOps Agent agentSpace id (created once in-console/CLI). The plugin queries this agentSpace's investigations."
+                  "description": "OPTIONAL pin to a pre-existing agentSpace id. When set, the plugin skips ListAgentSpaces / CreateAgentSpace. Leave empty for zero-touch lazy provisioning."
                 },
                 "region": {
                   "type": "string",
                   "pattern": "^$|^[a-z]{2}-[a-z]+-[0-9]$",
-                  "description": "Region for the DevOps Agent API."
+                  "description": "Region for the aidevops API. Defaults to spec.aws.region."
                 }
               }
             }

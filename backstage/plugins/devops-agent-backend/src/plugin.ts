@@ -6,9 +6,17 @@ import { createRouter } from './service/router';
 import { DevOpsAgentService } from './service/DevOpsAgentService';
 
 /**
- * DevOps Agent backend plugin. Exposes /api/devops-agent/incidents?entityRef=
- * which reads the entity's devops-agent-tags annotation and returns matching
- * DevOps Agent investigations. Modeled on the awslabs SecurityHub backend.
+ * DevOps Agent backend plugin. Phase 5 redesign: a genai-style chat surface
+ * modeled on awslabs/backstage-plugins-for-aws/plugins/genai. Exposes:
+ *   GET  /api/devops-agent/agentspace?entityRef=     resolve / lazy-create
+ *   POST /api/devops-agent/chats                     CreateChat
+ *   POST /api/devops-agent/chats/:chatId/messages    SendMessage
+ *   GET  /api/devops-agent/chats/:chatId/messages    ListChatMessages
+ *
+ * The agentSpace is provisioned on demand the first time an entity's chat
+ * is opened (CreateAgentSpace). Operators can pin a specific id via
+ * `aws.devopsAgent.agentSpaceId` or per-entity annotation, but the default
+ * path is zero-touch.
  */
 export const devopsAgentPlugin = createBackendPlugin({
   pluginId: 'devops-agent',

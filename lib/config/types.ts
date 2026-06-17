@@ -67,9 +67,18 @@ export interface PlatformConfig {
     };
     observability?: {
       devopsAgentWebhookSecretArn?: string;
+      /**
+       * DevOps Agent Backstage plugin (Phase 5 — genai-shape, chat tab).
+       * The plugin lazily provisions a Fleet-default agentSpace via
+       * `CreateAgentSpace` on first chat; pinning `agentSpaceId` is optional.
+       */
       devopsAgent?: {
         enabled?: boolean;
+        /** Name used when the plugin lazily creates the agentSpace. */
+        agentSpaceName?: string;
+        /** Optional pin to a pre-existing agentSpace id. */
         agentSpaceId?: string;
+        /** Region for the aidevops API. Defaults to spec.aws.region. */
         region?: string;
       };
     };

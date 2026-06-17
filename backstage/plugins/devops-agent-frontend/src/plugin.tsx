@@ -6,29 +6,29 @@ import { EntityContentBlueprint } from '@backstage/plugin-catalog-react/alpha';
 import { DEVOPS_AGENT_TAGS_ANNOTATION } from '@internal/plugin-devops-agent-common';
 
 /**
- * "Incidents" entity tab, contributed via the NEW frontend system
- * (EntityContentBlueprint). Only shows for entities that carry the
- * devops-agent-tags annotation. Equivalent to the awslabs SecurityHub
- * plugin's EntityAwsSecurityHubContent, adapted from the old frontend system.
+ * "DevOps Agent" entity tab. Phase 5 redesign: a genai-style interactive chat,
+ * modeled on awslabs/backstage-plugins-for-aws/plugins/genai. Replaces the
+ * earlier incidents-table tab.
  *
- * Uses the function-form `filter` (an (entity)=>boolean) rather than a string
- * filter expression, to avoid ambiguity in the annotation-path grammar.
+ * Visibility: only entities carrying the `aws.amazon.com/devops-agent-tags`
+ * annotation see the tab (function-form filter). Fleet stamps this annotation
+ * automatically on every workload Component via FleetEntityProvider.
  */
-const incidentsContent = EntityContentBlueprint.make({
-  name: 'incidents',
+const chatContent = EntityContentBlueprint.make({
+  name: 'devops-agent-chat',
   params: {
-    path: '/incidents',
-    title: 'Incidents',
+    path: '/devops-agent',
+    title: 'DevOps Agent',
     filter: (entity: { metadata?: { annotations?: Record<string, string> } }) =>
       Boolean(entity?.metadata?.annotations?.[DEVOPS_AGENT_TAGS_ANNOTATION]),
     loader: () =>
-      import('./IncidentsContent').then(m => <m.IncidentsContent />),
+      import('./ChatContent').then(m => <m.ChatContent />),
   },
 });
 
 const devopsAgentPlugin: FrontendPlugin = createFrontendPlugin({
   pluginId: 'devops-agent',
-  extensions: [incidentsContent],
+  extensions: [chatContent],
 });
 
 export default devopsAgentPlugin;

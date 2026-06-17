@@ -22,10 +22,20 @@ const env: cdk.Environment = {
 
 const stackNamePrefix = `fleet-${config.metadata.name}`;
 
+// Stack-wide tags. CDK propagates these to every taggable resource in both
+// stacks (VPC, subnets, EKS cluster, nodegroups, ASGs, ECR repos, IAM roles,
+// security groups, etc.). User-supplied tags from platform.yaml come last so
+// they can override our defaults if needed.
+//
+// `auto-delete=never` is required by Amazon's internal account janitor: any
+// resource without this tag may be reaped by automated cleanup. We default it
+// here so every Fleet-managed resource is protected; an operator who wants a
+// teardown-friendly stack can override per-resource via spec.aws.tags.
 const tags: Record<string, string> = {
   'fleet:managed-by': 'cdk',
   'fleet:org': config.metadata.org,
   'fleet:platform': config.metadata.name,
+  'auto-delete': 'never',
   ...(config.spec.aws.tags ?? {}),
 };
 
