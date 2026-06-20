@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+k8s/
+TODO.md
+docker-compose.yaml
+README.md

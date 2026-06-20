@@ -1,0 +1,252 @@
+# kro ResourceGraphDefinition: agentic service + Bedrock inference + memory.
+#
+# The Fleet golden path for AI agents. Maps the "Kubernetes for agentic apps"
+# blueprint onto AWS primitives Fleet already runs:
+#   - Inference     -> Amazon Bedrock (managed; no GPU node groups). The pod
+#                      assumes a per-workload IAM role via EKS Pod Identity and
+#                      calls Bedrock with zero static keys.
+#   - Long-term memory -> a DynamoDB table (ACK) for conversation/session state.
+#   - Artifacts     -> an S3 bucket (ACK).
+#
+# {{ CLUSTER_NAME }} / {{ REGION }} / {{ ACCOUNT }} are templated at render time,
+# mirroring stateless-service-with-bucket/rgd.yaml. Phase 4 moves the cluster
+# reference to an Environment CR.
+#
+# PREREQUISITE: provisions a dynamodb.services.k8s.aws/v1alpha1 Table, so the
+# ACK DynamoDB controller must be enabled in the cluster (the stateless path
+# only needs s3/iam/eks). Verified present on fleet-control.
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: agentic-service.kro.run
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: AgenticService
+    spec:
+      name: string
+      image: string
+      replicas: integer | default=2
+      containerPort: integer | default=8080
+      bucketSuffix: string | default=""
+      costCenter: string | default=""
+      namespace: string
+      # Bedrock inference profile ID the agent invokes. Defaults to the most
+      # capable Claude model via its cross-region (US) inference profile. The
+      # IAM policy grants invoke on any anthropic.* model + profile, so this can
+      # be retargeted without re-provisioning IAM.
+      modelId: string | default="us.anthropic.claude-opus-4-8"
+    status:
+      bucketArn: ${artifactBucket.status.ackResourceMetadata.arn}
+      memoryTableArn: ${memoryTable.status.ackResourceMetadata.arn}
+      serviceAccount: ${serviceAccount.metadata.name}
+      podIdentityAssociationName: ${podIdentityAssociation.metadata.name}
+
+  resources:
+    - id: artifactBucket
+      template:
+        apiVersion: s3.services.k8s.aws/v1alpha1
+        kind: Bucket
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.bucketSuffix}-${schema.spec.namespace}
+          namespace: ${schema.spec.namespace}
+        spec:
+          name: ${schema.spec.name}-${schema.spec.bucketSuffix}-${schema.spec.namespace}
+          tagging:
+            tagSet:
+              - key: fleet.platform.{{ ORG }}/project
+                value: ${schema.spec.namespace}
+              - key: fleet.platform.{{ ORG }}/cost-center
+                value: ${schema.spec.costCenter}
+
+    - id: memoryTable
+      template:
+        apiVersion: dynamodb.services.k8s.aws/v1alpha1
+        kind: Table
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.namespace}-memory
+          namespace: ${schema.spec.namespace}
+        spec:
+          tableName: ${schema.spec.name}-${schema.spec.namespace}-memory
+          # Single-key session store: one item per agent session/conversation.
+          # On-demand billing keeps it zero-touch for bursty agent traffic.
+          attributeDefinitions:
+            - attributeName: sessionId
+              attributeType: S
+          keySchema:
+            - attributeName: sessionId
+              keyType: HASH
+          billingMode: PAY_PER_REQUEST
+          tags:
+            - key: fleet.platform.{{ ORG }}/project
+              value: ${schema.spec.namespace}
+            - key: fleet.platform.{{ ORG }}/cost-center
+              value: ${schema.spec.costCenter}
+
+    - id: policy
+      template:
+        apiVersion: iam.services.k8s.aws/v1alpha1
+        kind: Policy
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.namespace}-agent
+        spec:
+          name: ${schema.spec.name}-${schema.spec.namespace}-agent
+          policyDocument: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "BedrockInvoke",
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                    "bedrock:Converse",
+                    "bedrock:ConverseStream"
+                  ],
+                  "Resource": [
+                    "arn:aws:bedrock:*::foundation-model/anthropic.*",
+                    "arn:aws:bedrock:*:{{ ACCOUNT }}:inference-profile/*.anthropic.*"
+                  ]
+                },
+                {
+                  "Sid": "MemoryTable",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:Query"
+                  ],
+                  "Resource": [
+                    "${memoryTable.status.ackResourceMetadata.arn}",
+                    "${memoryTable.status.ackResourceMetadata.arn}/index/*"
+                  ]
+                },
+                {
+                  "Sid": "ArtifactObjects",
+                  "Effect": "Allow",
+                  "Action": ["s3:GetObject","s3:PutObject","s3:DeleteObject"],
+                  "Resource": "${artifactBucket.status.ackResourceMetadata.arn}/*"
+                },
+                {
+                  "Sid": "ArtifactBucket",
+                  "Effect": "Allow",
+                  "Action": ["s3:ListBucket","s3:GetBucketLocation"],
+                  "Resource": "${artifactBucket.status.ackResourceMetadata.arn}"
+                }
+              ]
+            }
+
+    - id: role
+      template:
+        apiVersion: iam.services.k8s.aws/v1alpha1
+        kind: Role
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.namespace}
+        spec:
+          name: ${schema.spec.name}-${schema.spec.namespace}
+          policies:
+            - ${policy.status.ackResourceMetadata.arn}
+          assumeRolePolicyDocument: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Principal": { "Service": "pods.eks.amazonaws.com" },
+                "Action": ["sts:AssumeRole","sts:TagSession"]
+              }]
+            }
+
+    - id: serviceAccount
+      template:
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: ${schema.spec.name}
+          namespace: ${schema.spec.namespace}
+
+    - id: podIdentityAssociation
+      # Block the Deployment until ACK has reconciled this PodIdentityAssociation,
+      # so the pod never starts before the EKS Pod Identity agent injects the
+      # AWS_CONTAINER_* env vars (otherwise its first incarnation would try to
+      # call Bedrock under the node IAM role and fail). Same gate as the
+      # stateless golden path.
+      readyWhen:
+        - ${podIdentityAssociation.status.conditions.exists(c, c.type == "ACK.ResourceSynced" && c.status == "True")}
+      template:
+        apiVersion: eks.services.k8s.aws/v1alpha1
+        kind: PodIdentityAssociation
+        metadata:
+          name: ${schema.spec.name}-${schema.spec.namespace}
+          namespace: ${schema.spec.namespace}
+        spec:
+          clusterName: "{{ CLUSTER_NAME }}"
+          namespace: ${schema.spec.namespace}
+          serviceAccount: ${serviceAccount.metadata.name}
+          roleARN: ${role.status.ackResourceMetadata.arn}
+
+    - id: deployment
+      template:
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: ${schema.spec.name}
+          namespace: ${schema.spec.namespace}
+          labels:
+            app: ${schema.spec.name}
+            # Maps this workload to its Backstage Component (the entity carries
+            # the matching backstage.io/kubernetes-id annotation).
+            backstage.io/kubernetes-id: ${schema.spec.name}
+            # Dependency-edge marker: orders this Deployment after the PIA's
+            # readyWhen evaluates True. No runtime meaning.
+            fleet.platform.{{ ORG }}/pod-identity: ${podIdentityAssociation.metadata.name}
+        spec:
+          replicas: ${schema.spec.replicas}
+          selector:
+            matchLabels:
+              app: ${schema.spec.name}
+          template:
+            metadata:
+              labels:
+                app: ${schema.spec.name}
+                backstage.io/kubernetes-id: ${schema.spec.name}
+            spec:
+              serviceAccountName: ${serviceAccount.metadata.name}
+              containers:
+                - name: agent
+                  image: ${schema.spec.image}
+                  ports:
+                    - containerPort: ${schema.spec.containerPort}
+                  env:
+                    # The agent reads these to wire up the Bedrock client and
+                    # its memory/artifact backends. Credentials are injected by
+                    # Pod Identity, so no keys here. MODEL_ID matches the
+                    # hello-agent reference app's env contract.
+                    - name: MODEL_ID
+                      value: ${schema.spec.modelId}
+                    - name: AWS_REGION
+                      value: "{{ REGION }}"
+                    - name: MEMORY_TABLE
+                      value: ${memoryTable.spec.tableName}
+                    - name: ARTIFACT_BUCKET
+                      value: ${artifactBucket.spec.name}
+
+    - id: service
+      template:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: ${schema.spec.name}
+          namespace: ${schema.spec.namespace}
+          labels:
+            app: ${schema.spec.name}
+            backstage.io/kubernetes-id: ${schema.spec.name}
+        spec:
+          type: ClusterIP
+          selector:
+            app: ${schema.spec.name}
+          ports:
+            - port: ${schema.spec.containerPort}
+              targetPort: ${schema.spec.containerPort}
