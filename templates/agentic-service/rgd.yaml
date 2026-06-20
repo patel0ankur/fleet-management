@@ -212,6 +212,14 @@ spec:
               labels:
                 app: ${schema.spec.name}
                 backstage.io/kubernetes-id: ${schema.spec.name}
+                # Marks this as an agentic-service pod so the pod-identity
+                # recovery janitor (90-platform-addons) can target it: a pod
+                # admitted before its PodIdentityAssociation propagated starts
+                # without AWS creds, fails readiness, and — since Pod Identity
+                # injection is admission-only — can only recover by being
+                # re-created. The janitor deletes such NotReady pods so the
+                # Deployment re-admits them with creds.
+                fleet.platform.{{ ORG }}/workload-type: agentic-service
             spec:
               serviceAccountName: ${serviceAccount.metadata.name}
               containers:
