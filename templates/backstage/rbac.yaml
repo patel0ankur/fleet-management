@@ -39,6 +39,7 @@ rules:
       - s3.services.k8s.aws
       - iam.services.k8s.aws
       - eks.services.k8s.aws
+      - dynamodb.services.k8s.aws
     resources: ["*"]
     verbs: [get, list, watch]
   # Fleet platform CRs incl. IncidentBindings, so the FleetEntityProvider can

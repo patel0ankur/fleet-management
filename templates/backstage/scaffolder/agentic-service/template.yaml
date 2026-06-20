@@ -1,0 +1,115 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: agentic-service
+  title: Agentic service (Bedrock AI agent)
+  description: |
+    Provisions an AI agent workload: a Kubernetes Deployment + Service wired to
+    Amazon Bedrock for inference (via EKS Pod Identity — no static keys), a
+    DynamoDB table for session/long-term memory, and an S3 bucket for artifacts.
+    Defaults to the hello-agent reference image (a FastAPI + Bedrock Converse
+    agent you can fork). Opens a PR against fleet-gitops; once merged, Argo + kro
+    reconcile within ~3 minutes.
+  tags: [fleet, golden-path, aws, agent, bedrock, ai]
+spec:
+  owner: group:platform
+  type: service
+
+  parameters:
+    - title: Project
+      required: [project, name]
+      properties:
+        project:
+          title: Target project
+          type: string
+          description: Existing Project (= namespace in the cluster)
+          ui:field: EntityPicker
+          ui:options:
+            allowedKinds: [Group]
+            defaultKind: Group
+        name:
+          title: Service name
+          type: string
+          pattern: '^[a-z][a-z0-9-]{1,40}$'
+          description: DNS-safe; used for Deployment, Service, SA, IAM role, table + bucket prefix
+
+    - title: Agent runtime
+      required: [image]
+      properties:
+        image:
+          title: Container image
+          type: string
+          default: {{ ACCOUNT }}.dkr.ecr.{{ REGION }}.amazonaws.com/fleet/hello-agent:latest
+          description: Your agent container. Defaults to the hello-agent reference app. Must call Bedrock via the AWS SDK (creds come from Pod Identity).
+        modelId:
+          title: Bedrock model / inference profile ID
+          type: string
+          default: us.anthropic.claude-opus-4-8
+          description: Cross-region inference profile. Defaults to the most capable Claude model.
+        replicas:
+          title: Replica count
+          type: integer
+          default: 2
+          minimum: 1
+          maximum: 20
+        containerPort:
+          title: Container port
+          type: integer
+          default: 8080
+
+    - title: Storage
+      properties:
+        bucketSuffix:
+          title: Artifact bucket name suffix
+          type: string
+          default: artifacts
+          description: Appended to the bucket name to keep it globally unique.
+        costCenter:
+          title: Cost center tag
+          type: string
+          description: Optional. Falls back to the Project's costCenter annotation.
+
+  steps:
+    - id: render
+      name: Render manifest
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          project: ${{ parameters.project | parseEntityRef | pick('name') }}
+          name: ${{ parameters.name }}
+          image: ${{ parameters.image }}
+          modelId: ${{ parameters.modelId }}
+          replicas: ${{ parameters.replicas }}
+          containerPort: ${{ parameters.containerPort }}
+          bucketSuffix: ${{ parameters.bucketSuffix }}
+          costCenter: ${{ parameters.costCenter }}
+
+    - id: pr
+      name: Open pull request
+      action: publish:github:pull-request
+      input:
+        repoUrl: github.com?repo=fleet-gitops&owner={{ ORG_GH }}
+        branchName: scaffolder/${{ parameters.project | parseEntityRef | pick('name') }}-${{ parameters.name }}
+        title: 'feat(${{ parameters.project | parseEntityRef | pick(''name'') }}): add AgenticService ${{ parameters.name }}'
+        description: |
+          Scaffolded by Backstage.
+
+          Project: ${{ parameters.project }}
+          Image: ${{ parameters.image }}
+          Model: ${{ parameters.modelId }}
+
+          Once merged, the fleet-workloads ApplicationSet picks the new file
+          up and Argo reconciles it within ~3 minutes. kro fans out into
+          Deployment + Service + DynamoDB memory table + S3 bucket + IAM Role
+          + Pod Identity (Bedrock invoke + table/bucket access).
+
+    # NOTE: no catalog:register step — same rationale as stateless-service-with-bucket.
+    # The branch is ephemeral and GitHub read-consistency lags right after push;
+    # the catalog-info.yaml emitted alongside the kro CR is ingested from main
+    # once the PR merges.
+
+  output:
+    links:
+      - title: Pull request
+        url: ${{ steps.pr.output.remoteUrl }}

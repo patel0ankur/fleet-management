@@ -103,6 +103,7 @@ substitute() {
     -e "s|{{ *REGION *}}|$REGION|g" \
     -e "s|{{ *CLUSTER_NAME *}}|$CLUSTER_NAME|g" \
     -e "s|{{ *CLUSTER_ARN *}}|$CLUSTER_ARN|g" \
+    -e "s|{{ *ACCOUNT *}}|$ACCOUNT|g" \
     -e "s|{{ *HOST *}}|$HOST|g" \
     -e "s|{{ *ORG_GH *}}|$ORG_GH|g" \
     -e "s|{{ *GITHUB_TOKEN_SECRET_ARN *}}|$GITHUB_TOKEN_SECRET_ARN|g" \
@@ -124,6 +125,8 @@ substitute templates/project/rgd.yaml \
   "$GITOPS/clusters/control/30-infratemplates/project.yaml"
 substitute templates/stateless-service-with-bucket/rgd.yaml \
   "$GITOPS/clusters/control/30-infratemplates/stateless-service-with-bucket.yaml"
+substitute templates/agentic-service/rgd.yaml \
+  "$GITOPS/clusters/control/30-infratemplates/agentic-service.yaml"
 
 # ApplicationSets
 substitute templates/applicationsets/projects.yaml \
@@ -163,6 +166,17 @@ if [[ "$DP_ENABLED" == "true" ]]; then
   cp -R templates/backstage/scaffolder/stateless-service-with-bucket/skeleton/. \
     "$GITOPS/clusters/control/40-backstage/scaffolder/stateless-service-with-bucket/skeleton/"
   echo "    copied scaffolder skeleton (verbatim)"
+  # Agentic-service golden path scaffolder (auto-discovered via the
+  # scaffolder/*/template.yaml glob in values.yaml catalog.locations).
+  substitute templates/backstage/scaffolder/agentic-service/template.yaml \
+    "$GITOPS/clusters/control/40-backstage/scaffolder/agentic-service/template.yaml"
+  # Skeleton copied verbatim — literal Backstage `${{ values.* }}` must survive.
+  # rm -rf first so a removed skeleton file doesn't linger (cp -R won't prune).
+  rm -rf "$GITOPS/clusters/control/40-backstage/scaffolder/agentic-service/skeleton"
+  mkdir -p "$GITOPS/clusters/control/40-backstage/scaffolder/agentic-service/skeleton"
+  cp -R templates/backstage/scaffolder/agentic-service/skeleton/. \
+    "$GITOPS/clusters/control/40-backstage/scaffolder/agentic-service/skeleton/"
+  echo "    copied agentic-service scaffolder skeleton (verbatim)"
 else
   # developerPortal disabled: actively REMOVE any previously-rendered
   # 40-backstage so a stale directory doesn't keep getting deployed by the

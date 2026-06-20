@@ -1,0 +1,14 @@
+apiVersion: kro.run/v1alpha1
+kind: AgenticService
+metadata:
+  name: ${{ values.name }}
+  namespace: ${{ values.project }}
+spec:
+  name: ${{ values.name }}
+  image: ${{ values.image }}
+  modelId: ${{ values.modelId }}
+  replicas: ${{ values.replicas }}
+  containerPort: ${{ values.containerPort }}
+  bucketSuffix: ${{ values.bucketSuffix }}
+  costCenter: "${{ values.costCenter }}"
+  namespace: ${{ values.project }}
