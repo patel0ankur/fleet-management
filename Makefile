@@ -1,4 +1,4 @@
-.PHONY: help tools-check install synth diff deploy destroy lint test clean cli-build
+.PHONY: help tools-check install synth diff deploy destroy lint test clean
 
 CONFIG ?= config/platform.yaml
 
@@ -23,19 +23,14 @@ deploy: ## Deploy all stacks
 destroy: ## Destroy all stacks (DANGEROUS)
 	npx cdk destroy --all --force --context configFile=$(CONFIG)
 
-lint: ## Lint TS + Go
+lint: ## Lint TS
 	npx tsc --noEmit
-	cd cli/fleetctl && go vet ./...
 
 test: ## Run unit tests
 	npx jest --passWithNoTests
-	cd cli/fleetctl && go test ./...
-
-cli-build: ## Build fleetctl binary
-	cd cli/fleetctl && go build -o fleetctl .
 
 render-gitops: ## Render Phase 2 manifests into $GITOPS (default ../fleet-gitops). Pass SMOKE=1 to include the smoke-team fixture.
 	./hack/render-gitops.sh $(or $(GITOPS),../fleet-gitops) --config $(CONFIG) $(if $(SMOKE),--with-smoke,)
 
 clean:
-	rm -rf cdk.out node_modules cli/fleetctl/fleetctl
+	rm -rf cdk.out node_modules
