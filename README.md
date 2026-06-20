@@ -14,7 +14,7 @@ Five planes, mirroring OpenChoreo:
 
 | Plane | Components |
 |---|---|
-| **Experience** | Backstage portal, `fleetctl` CLI, GitOps repo |
+| **Experience** | Backstage portal, GitOps repo |
 | **Control** | EKS + ArgoCD + kro + ACK controllers + Fleet CRDs |
 | **CI** | Argo Workflows + Buildpacks + ECR |
 | **Data** | Target AWS accounts (workloads), cross-account IAM |
@@ -31,9 +31,8 @@ git clone <this-repo> && cd fleet_infra
 cp config/platform.example.yaml config/platform.yaml
 $EDITOR config/platform.yaml          # fill in account, region, gitops repo
 make tools-check
-fleetctl init
-fleetctl deploy                       # ~30-40 min
-fleetctl status                       # all green
+make install
+make deploy                           # cdk deploy --all, ~30-40 min
 ```
 
 See [docs/getting-started.md](docs/getting-started.md).

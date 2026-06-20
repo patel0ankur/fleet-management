@@ -27,7 +27,7 @@ export function loadPlatformConfig(filePath: string): PlatformConfig {
   if (!fs.existsSync(filePath)) {
     throw new Error(
       `platform config not found at ${filePath}. ` +
-      `Run 'fleetctl init' or 'cp config/platform.example.yaml config/platform.yaml'.`
+      `Run 'cp config/platform.example.yaml config/platform.yaml' and edit it.`
     );
   }
 

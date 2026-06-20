@@ -1,0 +1,132 @@
+# CI-only fixture: real account/region (so committed cdk.context.json AZ data
+# satisfies 'cdk synth --no-lookups' with NO AWS creds) + valid-shaped IdC values.
+# NOT for deploy. Human template with placeholders: platform.example.yaml.
+# Fleet Management — PlatformConfig
+# Copy to platform.yaml and edit before running `fleetctl deploy`.
+# Schema: ./platform.schema.json
+
+apiVersion: fleet.platform/v1
+kind: PlatformConfig
+metadata:
+  # DNS-safe name for this Fleet instance. Used as a prefix on every CDK stack.
+  name: acme-fleet
+  # Org slug. Phase 2+ CRDs will live under group `platform.<org>`.
+  org: acme
+
+spec:
+  aws:
+    # 12-digit shared-services account that hosts the EKS control cluster.
+    sharedServicesAccount: "590443650088"
+    region: us-west-2
+    # Applied to every CDK-managed resource.
+    tags:
+      Owner: platform-team
+      CostCenter: "1234"
+      Environment: shared-services
+
+  network:
+    vpcCidr: 10.40.0.0/16
+    azCount: 3
+    # Single NAT keeps cost down for non-prod control planes.
+    # Bump to 3 (one per AZ) for HA workloads.
+    natGateways: 1
+    # If empty, the EKS API endpoint allows public access from 0.0.0.0/0
+    # during bootstrap. Phase 7 hardening switches to private + bastion.
+    publicAccessCidrs: []
+
+  eks:
+    name: fleet-control
+    # Latest cleanly-supported EKS version. AL2023 node AMIs + latest add-ons
+    # are selected automatically. Supported: 1.32-1.35.
+    version: "1.35"
+    # IAM principals that should get cluster-admin via Access Entries.
+    # Add the role/user that runs `fleetctl deploy` so kubectl works
+    # without a manual `aws eks create-access-entry` follow-up.
+    adminPrincipalArns:
+      - arn:aws:iam::590443650088:role/PlatformEngineer
+    nodeGroups:
+      - name: system
+        instanceTypes: [m6i.large]
+        minSize: 2
+        maxSize: 4
+        labels:
+          fleet.role: system
+        taints:
+          - key: dedicated
+            value: system
+            effect: NO_SCHEDULE
+      - name: platform
+        instanceTypes: [m6i.xlarge]
+        minSize: 3
+        maxSize: 6
+        labels:
+          fleet.role: platform
+
+  # AWS Identity Center is required for the Argo CD capability.
+  # Get the instance ARN with: aws sso-admin list-instances
+  # Get group IDs with: aws identitystore list-groups --identity-store-id <id>
+  identity:
+    idc:
+      instanceArn: arn:aws:sso:::instance/ssoins-0123456789abcdef
+      region: us-east-1
+      # IdC user or group that gets Argo CD ADMIN role
+      adminGroupId: 11111111-2222-3333-4444-555555555555
+      adminGroupType: SSO_GROUP   # or SSO_USER
+
+  gitops:
+    # Repo that will hold ArgoCD Application manifests, kro ResourceGroups,
+    # and InfraTemplates. Create it (empty is fine) before deploying.
+    repoUrl: https://github.com/acme/fleet-gitops
+    branch: main
+    # Path inside the repo that the bootstrap Application watches.
+    pathPrefix: clusters/control
+    # One of these is required for private repos. Secrets Manager ARN.
+    sshKeySecretArn: ""
+    tokenSecretArn: ""
+
+  # EKS Capabilities — fully managed by AWS. Toggle each capability on/off.
+  # Each becomes an AWS::EKS::Capability resource with its own IAM Capability Role.
+  # See https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html
+  capabilities:
+    ack:    true
+    kro:    true
+    argocd: true
+
+  # Phase 5 — incidents / RCA via AWS DevOps Agent, surfaced in Backstage.
+  observability:
+    devopsAgentWebhookSecretArn: ""   # reserved; not used by the plugin
+    # Backstage DevOps Agent plugin (modeled on the awslabs SecurityHub
+    # plugin): the Backstage backend calls the aidevops API at request time
+    # and renders an "Incidents" tab on entity pages that carry the
+    # aws.amazon.com/devops-agent-tags annotation. AWS creds come from the
+    # Backstage pod's Pod Identity role.
+    devopsAgent:
+      enabled: false
+      # DevOps Agent agentSpace id (created once in-console / CreateAgentSpace).
+      # Also run the agent's "EKS Access Setup" capability so it can analyze
+      # this cluster.
+      agentSpaceId: ""
+      region: us-east-1
+
+  # Phase 6 — wired in later.
+  cost:
+    curBucket: ""
+
+  # Phase 3 — Backstage developer portal. Set enabled=true and fill in the rest
+  # to install Backstage in-cluster with IdC OIDC + GitHub PR scaffolding.
+  developerPortal:
+    enabled: false
+    # Public hostname; CNAME this at your DNS provider to the ALB created by
+    # the Backstage Ingress. Operator-managed for now (Phase 3.5 adds a
+    # Route53 ACK record).
+    host: backstage.acme.example.com
+    # GitHub org or user that owns fleet-gitops; used to build PR URLs.
+    githubOrg: acme
+    # Secrets Manager ARNs the Backstage pod reads via Pod Identity + ASCP.
+    # Create both secrets manually before deploy:
+    #   - GitHub PAT with repo + pull_request scopes (or a GitHub App token)
+    #   - OIDC client secret issued by the IdC customer-managed application
+    #     (CDK creates the application; the secret is available in the IdC
+    #     console after the first deploy).
+    githubTokenSecretArn: ""
+    oidcClientSecretArn: ""
