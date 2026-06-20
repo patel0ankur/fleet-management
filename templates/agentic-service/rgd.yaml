@@ -232,6 +232,28 @@ spec:
                       value: ${memoryTable.spec.tableName}
                     - name: ARTIFACT_BUCKET
                       value: ${artifactBucket.spec.name}
+                  # Liveness: the process is up (cheap, no AWS call).
+                  livenessProbe:
+                    httpGet:
+                      path: /health
+                      port: ${schema.spec.containerPort}
+                    initialDelaySeconds: 5
+                    periodSeconds: 15
+                  # Readiness: /ready does an STS get-caller-identity, so a pod
+                  # that was admitted before its Pod Identity association
+                  # propagated (NoCredentialsError) is marked NotReady and
+                  # pulled from the Service — chat traffic routes only to pods
+                  # that actually have working credentials. failureThreshold +
+                  # period give Pod Identity injection time to settle on a
+                  # normal start before flapping NotReady.
+                  readinessProbe:
+                    httpGet:
+                      path: /ready
+                      port: ${schema.spec.containerPort}
+                    initialDelaySeconds: 10
+                    periodSeconds: 10
+                    timeoutSeconds: 5
+                    failureThreshold: 3
 
     - id: service
       template:
